@@ -1,0 +1,28 @@
+{
+	"flutter": {
+		"platforms": {
+			"android": {
+				"default": {
+					"projectId": "sales-erp-desktop-260715",
+					"appId": "1:331589496845:android:fb7cad2db2060ae60ee544",
+					"fileOutput": "android/app/google-services.json"
+				}
+			},
+			"dart": {
+				"lib/firebase_options.dart": {
+					"projectId": "sales-erp-desktop-260715",
+					"configurations": {
+						"android": "1:331589496845:android:fb7cad2db2060ae60ee544",
+						"ios": "1:331589496845:ios:fd7e5d43cff7552d0ee544",
+						"macos": "1:331589496845:ios:fd7e5d43cff7552d0ee544",
+						"web": "1:331589496845:web:1e9c82f3d9fe0ebd0ee544",
+						"windows": "1:331589496845:web:86927a694f4fc3500ee544"
+					}
+				}
+			}
+		}
+	},
+	"firestore": {
+		"rules": "firestore.rules"
+	}
+}

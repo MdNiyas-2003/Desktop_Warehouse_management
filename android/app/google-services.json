@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "331589496845",
+    "project_id": "sales-erp-desktop-260715",
+    "storage_bucket": "sales-erp-desktop-260715.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:331589496845:android:fb7cad2db2060ae60ee544",
+        "android_client_info": {
+          "package_name": "com.example.desktop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAtawkD7dAMqQUIhBtXsFrYTMabi_UsVZU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
