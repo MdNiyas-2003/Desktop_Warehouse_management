@@ -396,7 +396,7 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
 
   String? _businessType;
   String? _state;
-  bool _sameBillingAddress = true;
+  bool _sameBillingAddress = false;
   bool _addAnotherAfterSave = false;
   _CustomerDialogSection _activeSection = _CustomerDialogSection.companyDetails;
   final ScrollController _contentScrollController = ScrollController();
@@ -484,6 +484,12 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
   @override
   void initState() {
     super.initState();
+
+    _billingAddressController.addListener(() {
+      if (_sameBillingAddress) {
+        _shippingAddressController.text = _billingAddressController.text;
+      }
+    });
 
     if (!widget.isEdit) return;
 
@@ -969,6 +975,8 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                         if (value) {
                                           _shippingAddressController.text =
                                               _billingAddressController.text;
+                                        } else {
+                                          _shippingAddressController.clear();
                                         }
                                       });
                                     },
