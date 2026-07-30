@@ -425,7 +425,7 @@ class _LeftPanel extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: compact ? 14 : 16),
-                Text('Sales ERP', style: headingStyle),
+                Text('WareHouse Management', style: headingStyle),
                 const SizedBox(height: 4),
                 Text('Salesman Orders Warehouse', style: subtitleStyle),
                 const SizedBox(height: 10),

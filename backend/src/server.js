@@ -106,6 +106,53 @@ async function ensureWarehouseTables() {
   await query(
     "ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'General'",
   );
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      customer_id UUID,
+      supplier_id UUID,
+      invoice_id UUID,
+      payment_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      payment_method TEXT NOT NULL DEFAULT '',
+      reference_no TEXT NOT NULL DEFAULT '',
+      cheque_no TEXT NOT NULL DEFAULT '',
+      cheque_date TIMESTAMPTZ,
+      amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+      notes TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'Paid',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id),
+      CONSTRAINT fk_supplier FOREIGN KEY (supplier_id) REFERENCES supplier_invoices(id)
+    )
+  `);
+
+  await query(
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS supplier_id UUID",
+  );
+  await query(
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS invoice_id UUID",
+  );
+  await query(
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS voucher_no TEXT NOT NULL DEFAULT ''",
+  );
+  await query(
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS cheque_no TEXT NOT NULL DEFAULT ''",
+  );
+  await query(
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS cheque_date TIMESTAMPTZ",
+  );
+
+  await query(
+    'CREATE INDEX IF NOT EXISTS idx_payments_payment_date ON payments(payment_date DESC)',
+  );
+  await query(
+    'CREATE INDEX IF NOT EXISTS idx_payments_customer_id ON payments(customer_id)',
+  );
+  await query(
+    'CREATE INDEX IF NOT EXISTS idx_payments_supplier_id ON payments(supplier_id)',
+  );
 }
 
 function parseInvoiceDate(value) {
@@ -128,6 +175,8 @@ function parseInvoiceDate(value) {
   return `${year}-${month}-${day}`;
 }
 
+///------------------------------------health check Api---------------------------------------///
+
 app.get('/api/health', async (_req, res) => {
   try {
     await query('SELECT 1');
@@ -136,27 +185,78 @@ app.get('/api/health', async (_req, res) => {
     return res.status(500).json({ ok: false, message: error.message });
   }
 });
+///------------------------------------ Customer Api---------------------------------------///
 
 app.get('/api/customers', async (_req, res) => {
   try {
     const result = await query(
-      `SELECT id, company_name, owner_name, mobile, email, gstin, region, address, created_at
-       FROM customers
-       ORDER BY created_at DESC`,
+      `SELECT 
+     id,
+      customer_code,
+      company_name,
+      short_name,
+      customer_category,
+      business_type,
+      industry,
+      business_since,
+      website,
+
+      contact_person,
+      designation,
+      department,
+      mobile,
+      alternate_mobile,
+      office_phone,
+      whatsapp,
+      email,
+
+      address_line1,
+      address_line2,
+      area,
+      landmark,
+      city,
+      state,
+      country,
+      pin_code,
+      billing_address,
+      shipping_address,
+
+      gst_registration_type,
+      gstin,
+      pan,
+      registration_no,
+      msme_no,
+      cin_no,
+      fssai_no,
+      drug_license_no,
+      iec_code,
+
+      payment_terms,
+      payment_mode,
+      currency,
+      credit_days,
+      credit_limit,
+      price_list,
+      assigned_salesman,
+      sales_region,
+
+      gst_certificate,
+      pan_document,
+      trade_license,
+      address_proof,
+      agreement_document,
+      other_document,
+
+      notes,
+      status,
+      created_at,
+      updated_at
+      FROM customers
+      ORDER BY company_name;`,
     );
 
-    return res.json(
-      result.rows.map((row) => ({
-        id: row.id,
-        companyName: row.company_name,
-        ownerName: row.owner_name,
-        mobile: row.mobile,
-        email: row.email,
-        gstin: row.gstin,
-        region: row.region,
-        address: row.address,
-      })),
-    );
+    return res.json(result.rows);
+
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -164,14 +264,71 @@ app.get('/api/customers', async (_req, res) => {
 
 app.post('/api/customers', async (req, res) => {
   const {
+    // Company Profile
+    customerCode,
     companyName,
-    ownerName = '',
-    mobile = '',
-    email = '',
-    gstin = '',
-    region = '',
-    address = '',
-  } = req.body || {};
+    shortName,      // <-- ADD THIS LINE
+    customerCategory,
+    businessType,
+    industry,
+    businessSince,
+    website,
+
+    // Contact
+    contactPerson,
+    designation,
+    department,
+    mobile,
+    alternateMobile,
+    officePhone,
+    whatsapp,
+    email,
+
+    // Address
+    addressLine1,
+    addressLine2,
+    area,
+    landmark,
+    city,
+    state,
+    country,
+    pinCode,
+    billingAddress,
+    shippingAddress,
+
+    // Business & Tax
+    gstRegistrationType,
+    gstin,
+    pan,
+    registrationNo,
+    msmeNo,
+    cinNo,
+    fssaiNo,
+    drugLicenseNo,
+    iecCode,
+
+    // Finance
+    paymentTerms,
+    paymentMode,
+    currency,
+    creditDays,
+    creditLimit,
+    priceList,
+    assignedSalesman,
+    salesRegion,
+
+    // Documents
+    gstCertificate,
+    panDocument,
+    tradeLicense,
+    addressProof,
+    agreementDocument,
+    otherDocument,
+
+    // Others
+    notes,
+    status
+  } = req.body;
 
   if (!companyName || String(companyName).trim().length === 0) {
     return res.status(400).json({ message: 'companyName is required' });
@@ -179,78 +336,385 @@ app.post('/api/customers', async (req, res) => {
 
   try {
     const result = await query(
-      `INSERT INTO customers (company_name, owner_name, mobile, email, gstin, region, address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, company_name, owner_name, mobile, email, gstin, region, address`,
-      [companyName, ownerName, mobile, email, gstin, region, address],
+      `INSERT INTO customers (
+      customer_code,
+      company_name,
+      short_name,
+      customer_category,
+      business_type,
+      industry,
+      business_since,
+      website,
+
+      contact_person,
+      designation,
+      department,
+      mobile,
+      alternate_mobile,
+      office_phone,
+      whatsapp,
+      email,
+
+      address_line1,
+      address_line2,
+      area,
+      landmark,
+      city,
+      state,
+      country,
+      pin_code,
+      billing_address,
+      shipping_address,
+
+      gst_registration_type,
+      gstin,
+      pan,
+      registration_no,
+      msme_no,
+      cin_no,
+      fssai_no,
+      drug_license_no,
+      iec_code,
+
+      payment_terms,
+      payment_mode,
+      currency,
+      credit_days,
+      credit_limit,
+      price_list,
+      assigned_salesman,
+      sales_region,
+
+      gst_certificate,
+      pan_document,
+      trade_license,
+      address_proof,
+      agreement_document,
+      other_document,
+
+      notes,
+      status
+  )
+  VALUES (
+      $1,$2,$3,$4,$5,$6,$7,$8,
+      $9,$10,$11,$12,$13,$14,$15,$16,
+      $17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
+      $27,$28,$29,$30,$31,$32,$33,$34,$35,
+      $36,$37,$38,$39,$40,$41,$42,$43,
+      $44,$45,$46,$47,$48,$49,
+      $50,$51
+  )
+  RETURNING *`,
+      [
+        customerCode,
+        companyName,
+        shortName,
+        customerCategory,
+        businessType,
+        industry,
+        businessSince,
+        website,
+
+        contactPerson,
+        designation,
+        department,
+        mobile,
+        alternateMobile,
+        officePhone,
+        whatsapp,
+        email,
+
+        addressLine1,
+        addressLine2,
+        area,
+        landmark,
+        city,
+        state,
+        country,
+        pinCode,
+        billingAddress,
+        shippingAddress,
+
+        gstRegistrationType,
+        gstin,
+        pan,
+        registrationNo,
+        msmeNo,
+        cinNo,
+        fssaiNo,
+        drugLicenseNo,
+        iecCode,
+
+        paymentTerms,
+        paymentMode,
+        currency,
+        creditDays,
+        creditLimit,
+        priceList,
+        assignedSalesman,
+        salesRegion,
+
+        gstCertificate,
+        panDocument,
+        tradeLicense,
+        addressProof,
+        agreementDocument,
+        otherDocument,
+
+        notes,
+        status ?? "Active",
+      ]
     );
 
     const row = result.rows[0];
-    return res.status(201).json({
-      id: row.id,
-      companyName: row.company_name,
-      ownerName: row.owner_name,
-      mobile: row.mobile,
-      email: row.email,
-      gstin: row.gstin,
-      region: row.region,
-      address: row.address,
-    });
+
+    return res.status(201).json(row);
+
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
 });
+app.put('/api/customers/:id', async (req, res) => {
+  const { id } = req.params;
 
-app.get('/api/catalog', async (_req, res) => {
+  const {
+    customerCode,
+    companyName,
+    shortName,
+    customerCategory,
+    businessType,
+    industry,
+    businessSince,
+    website,
+
+    contactPerson,
+    designation,
+    department,
+    mobile,
+    alternateMobile,
+    officePhone,
+    whatsapp,
+    email,
+
+    addressLine1,
+    addressLine2,
+    area,
+    landmark,
+    city,
+    state,
+    country,
+    pinCode,
+    billingAddress,
+    shippingAddress,
+
+    gstRegistrationType,
+    gstin,
+    pan,
+    registrationNo,
+    msmeNo,
+    cinNo,
+    fssaiNo,
+    drugLicenseNo,
+    iecCode,
+
+    paymentTerms,
+    paymentMode,
+    currency,
+    creditDays,
+    creditLimit,
+    priceList,
+    assignedSalesman,
+    salesRegion,
+
+    gstCertificate,
+    panDocument,
+    tradeLicense,
+    addressProof,
+    agreementDocument,
+    otherDocument,
+
+    notes,
+    status,
+  } = req.body;
+
   try {
     const result = await query(
-      `SELECT id, category, item_name, sku, rate
-       FROM catalog_items
-       ORDER BY category, item_name`,
+      `
+      UPDATE customers
+      SET
+        customer_code=$1,
+        company_name=$2,
+        short_name=$3,
+        customer_category=$4,
+        business_type=$5,
+        industry=$6,
+        business_since=$7,
+        website=$8,
+
+        contact_person=$9,
+        designation=$10,
+        department=$11,
+        mobile=$12,
+        alternate_mobile=$13,
+        office_phone=$14,
+        whatsapp=$15,
+        email=$16,
+
+        address_line1=$17,
+        address_line2=$18,
+        area=$19,
+        landmark=$20,
+        city=$21,
+        state=$22,
+        country=$23,
+        pin_code=$24,
+        billing_address=$25,
+        shipping_address=$26,
+
+        gst_registration_type=$27,
+        gstin=$28,
+        pan=$29,
+        registration_no=$30,
+        msme_no=$31,
+        cin_no=$32,
+        fssai_no=$33,
+        drug_license_no=$34,
+        iec_code=$35,
+
+        payment_terms=$36,
+        payment_mode=$37,
+        currency=$38,
+        credit_days=$39,
+        credit_limit=$40,
+        price_list=$41,
+        assigned_salesman=$42,
+        sales_region=$43,
+
+        gst_certificate=$44,
+        pan_document=$45,
+        trade_license=$46,
+        address_proof=$47,
+        agreement_document=$48,
+        other_document=$49,
+
+        notes=$50,
+        status=$51,
+        updated_at=NOW()
+
+      WHERE id=$52
+
+      RETURNING *
+      `,
+      [
+        customerCode,
+        companyName,
+        shortName,
+        customerCategory,
+        businessType,
+        industry,
+        businessSince,
+        website,
+
+        contactPerson,
+        designation,
+        department,
+        mobile,
+        alternateMobile,
+        officePhone,
+        whatsapp,
+        email,
+
+        addressLine1,
+        addressLine2,
+        area,
+        landmark,
+        city,
+        state,
+        country,
+        pinCode,
+        billingAddress,
+        shippingAddress,
+
+        gstRegistrationType,
+        gstin,
+        pan,
+        registrationNo,
+        msmeNo,
+        cinNo,
+        fssaiNo,
+        drugLicenseNo,
+        iecCode,
+
+        paymentTerms,
+        paymentMode,
+        currency,
+        creditDays,
+        creditLimit,
+        priceList,
+        assignedSalesman,
+        salesRegion,
+
+        gstCertificate,
+        panDocument,
+        tradeLicense,
+        addressProof,
+        agreementDocument,
+        otherDocument,
+
+        notes,
+        status,
+        id,
+      ],
     );
 
-    return res.json(
-      result.rows.map((row) => ({
-        id: row.id,
-        category: row.category,
-        itemName: row.item_name,
-        sku: row.sku,
-        rate: Number(row.rate),
-      })),
-    );
+    if (result.rowCount == 0) {
+      return res.status(404).json({
+        message: 'Customer not found',
+      });
+    }
+
+    return res.json(result.rows[0]);
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({
+      message: error.message,
+    });
   }
 });
-
-app.post('/api/catalog', async (req, res) => {
-  const { category = 'General', itemName, sku = '', rate = 0 } = req.body || {};
-
-  if (!itemName || String(itemName).trim().length === 0) {
-    return res.status(400).json({ message: 'itemName is required' });
-  }
+app.delete('/api/customers/:id', async (req, res) => {
+  const { id } = req.params;
 
   try {
     const result = await query(
-      `INSERT INTO catalog_items (category, item_name, sku, rate)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, category, item_name, sku, rate`,
-      [category, itemName, sku || itemName, Number(rate) || 0],
+      `DELETE FROM customers
+       WHERE id = $1
+       RETURNING id`,
+      [id],
     );
 
-    const row = result.rows[0];
-    return res.status(201).json({
-      id: row.id,
-      category: row.category,
-      itemName: row.item_name,
-      sku: row.sku,
-      rate: Number(row.rate),
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        message: 'Customer not found',
+      });
+    }
+
+    return res.json({
+      message: 'Customer deleted successfully',
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    if (error.code === '23503') {
+      return res.status(400).json({
+        message:
+          'This customer already has orders. Delete is not allowed.',
+      });
+    }
+
+    return res.status(500).json({
+      message: error.message,
+    });
   }
 });
 
+///------------------------------------Orders Api---------------------------------------///
 app.get('/api/orders', async (_req, res) => {
   try {
     await query(
@@ -328,6 +792,34 @@ app.get('/api/orders', async (_req, res) => {
     return res.status(500).json({ message: error.message });
   }
 });
+
+app.delete('/api/orders/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await query(
+      `DELETE FROM orders
+       WHERE id = $1
+       RETURNING id`,
+      [id],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        message: 'Draft not found',
+      });
+    }
+
+    return res.json({
+      message: 'Draft deleted successfully',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+
 app.get('/api/orders/drafts', async (_req, res) => {
   try {
     const result = await query(`
@@ -521,7 +1013,30 @@ app.post('/api/orders', async (req, res) => {
     client.release();
   }
 });
+app.get('/api/orders/customer/:customerId', async (req, res) => {
+  try {
+    const result = await query(
+      `
+      SELECT
+        o.id,
+        o.order_code AS invoice_no,
+        o.amount,
+        o.status,
+        o.created_at AS invoice_date
+      FROM orders o
+      WHERE o.customer_id = $1
+      ORDER BY o.created_at DESC
+      `,
+      [req.params.customerId],
+    );
 
+    return res.json(result.rows);
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
 app.patch('/api/orders/:id/status', async (req, res) => {
   const { id } = req.params;
   const {
@@ -575,8 +1090,349 @@ app.patch('/api/orders/:id/status', async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 });
+app.get('/api/catalog', async (_req, res) => {
+  try {
+    const result = await query(
+      `SELECT id, category, item_name, sku, rate
+       FROM catalog_items
+       ORDER BY category, item_name`,
+    );
 
-app.post('/api/warehouse/receipts', async (req, res) => {
+    return res.json(
+      result.rows.map((row) => ({
+        id: row.id,
+        category: row.category,
+        itemName: row.item_name,
+        sku: row.sku,
+        rate: Number(row.rate),
+      })),
+    );
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/api/catalog', async (req, res) => {
+  const { category = 'General', itemName, sku = '', rate = 0 } = req.body || {};
+
+  if (!itemName || String(itemName).trim().length === 0) {
+    return res.status(400).json({ message: 'itemName is required' });
+  }
+
+  try {
+    const result = await query(
+      `INSERT INTO catalog_items (category, item_name, sku, rate)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, category, item_name, sku, rate`,
+      [category, itemName, sku || itemName, Number(rate) || 0],
+    );
+
+    const row = result.rows[0];
+    return res.status(201).json({
+      id: row.id,
+      category: row.category,
+      itemName: row.item_name,
+      sku: row.sku,
+      rate: Number(row.rate),
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+app.get('/api/categories', async (_req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        id,
+        name,
+        created_at
+      FROM categories
+      ORDER BY name
+    `);
+
+    return res.json(result.rows);
+
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.post('/api/categories', async (req, res) => {
+  const { name, description = '' } = req.body;
+
+  if (!name || String(name).trim().length === 0) {
+    return res.status(400).json({
+      message: 'Category name is required',
+    });
+  }
+
+  try {
+    const exists = await query(
+      `SELECT id
+       FROM categories
+       WHERE LOWER(name)=LOWER($1)`,
+      [name.trim()],
+    );
+
+    if (exists.rowCount > 0) {
+      return res.status(409).json({
+        message: 'Category already exists',
+      });
+    }
+
+    const result = await query(
+      `INSERT INTO categories
+      (name)
+      VALUES($1)
+      RETURNING *`,
+      [
+        name.trim(),
+      ],
+    );
+
+    return res.status(201).json(result.rows[0]);
+
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.delete('/api/categories/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await query(
+      `DELETE FROM categories
+       WHERE id=$1
+       RETURNING id`,
+      [id],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        message: 'Category not found',
+      });
+    }
+
+    return res.json({
+      message: 'Category deleted successfully',
+    });
+
+  } catch (error) {
+
+    if (error.code === '23503') {
+      return res.status(400).json({
+        message:
+          'Category already used by items.',
+      });
+    }
+
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.get('/api/items', async (req, res) => {
+  const { categoryId } = req.query;
+
+  try {
+
+    let result;
+
+    if (categoryId) {
+
+      result = await query(
+        `SELECT *
+         FROM items
+         WHERE category_id=$1
+         ORDER BY item_name`,
+        [categoryId],
+      );
+
+    } else {
+
+      result = await query(
+        `SELECT *
+         FROM items
+         ORDER BY item_name`,
+      );
+    }
+
+    return res.json(result.rows);
+
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.post('/api/items', async (req, res) => {
+
+  const {
+  categoryId,
+  itemName,
+  itemCode,
+  unit,
+  rate,
+  gst,
+  stock = 0,
+} = req.body;
+
+  if (!itemName) {
+    return res.status(400).json({
+      message: 'Item name required',
+    });
+  }
+
+  try {
+
+  const exists = await query(
+  `SELECT *
+   FROM items
+   WHERE category_id = $1
+   AND LOWER(item_name) = LOWER($2)`,
+  [
+    categoryId,
+    itemName.trim(),
+  ],
+);
+
+if (exists.rowCount > 0) {
+
+  const existingItem = exists.rows[0];
+
+  const updated = await query(
+    `UPDATE items
+     SET stock = stock + $1
+     WHERE id = $2
+     RETURNING *`,
+    [
+      req.body.stock ?? 0,
+      existingItem.id,
+    ],
+  );
+
+  return res.status(200).json({
+    message: 'Stock updated successfully',
+    item: updated.rows[0],
+  });
+}
+
+    const result = await query(
+      `INSERT INTO items
+      (
+  category_id,
+  item_name,
+  item_code,
+  unit,
+  rate,
+  gst,
+  stock
+)
+VALUES
+($1,$2,$3,$4,$5,$6,$7)
+      RETURNING *`,
+      [
+        categoryId,
+        itemName.trim(),
+        itemCode,
+        unit,
+        rate,
+        gst,
+        stock,
+      ],
+    );
+
+    return res.status(201).json(result.rows[0]);
+
+  } catch (error) {
+    return res.status(500).json({
+      message:error.message,
+    });
+  }
+
+});
+app.put('/api/items/:id', async (req, res) => {
+
+  const { id } = req.params;
+
+  const {
+    categoryId,
+    itemName,
+    itemCode,
+    unit,
+    rate,
+    gst,
+  } = req.body;
+
+  try {
+
+    const result = await query(
+      `UPDATE items
+       SET
+         category_id=$1,
+         item_name=$2,
+         item_code=$3,
+         unit=$4,
+         rate=$5,
+         gst=$6
+       WHERE id=$7
+       RETURNING *`,
+      [
+        categoryId,
+        itemName,
+        itemCode,
+        unit,
+        rate,
+        gst,
+        id,
+      ],
+    );
+
+    return res.json(result.rows[0]);
+
+  } catch(error){
+    return res.status(500).json({
+      message:error.message,
+    });
+  }
+
+});
+app.delete('/api/items/:id', async (req,res)=>{
+
+  const {id}=req.params;
+
+  try{
+
+    const result=await query(
+      `DELETE FROM items
+       WHERE id=$1
+       RETURNING id`,
+      [id],
+    );
+
+    if(result.rowCount===0){
+      return res.status(404).json({
+        message:'Item not found',
+      });
+    }
+
+    return res.json({
+      message:'Item deleted successfully',
+    });
+
+  }catch(error){
+
+    return res.status(500).json({
+      message:error.message,
+    });
+
+  }
+
+});
+async function handleWarehouseReceipt(req, res) {
   const {
     supplier,
     invoiceNo,
@@ -686,7 +1542,63 @@ app.post('/api/warehouse/receipts', async (req, res) => {
       const itemCode = itemCodeRaw
         .replace(/[^a-z0-9_-]+/g, '_')
         .replace(/_+/g, '_');
+// -------------------- Sync Item Master --------------------
 
+      const itemName = String(item.itemName || '').trim();
+
+      const itemExists = await client.query(
+        `SELECT id
+         FROM items
+         WHERE LOWER(item_name) = LOWER($1)`,
+        [itemName],
+      );
+
+      if (itemExists.rowCount > 0) {
+        await client.query(
+          `UPDATE items
+           SET stock = stock + $1,
+               rate = $2,
+               gst = $3
+           WHERE id = $4`,
+          [
+            qty,
+            rate,
+            tax,
+            itemExists.rows[0].id,
+          ],
+        );
+      } else {
+        const categoryResult = await client.query(
+          `SELECT id FROM categories WHERE LOWER(name)=LOWER($1) LIMIT 1`,
+          [category],
+        );
+
+        const categoryId =
+          categoryResult.rowCount > 0 ? categoryResult.rows[0].id : null;
+        await client.query(
+          `INSERT INTO items
+            (
+              category_id,
+              item_name,
+              item_code,
+              unit,
+              rate,
+              gst,
+              stock
+            )
+           VALUES
+            ($1,$2,$3,$4,$5,$6,$7)`,
+          [
+            categoryId,
+            itemName,
+            itemCode,
+            String(item.unit || 'pcs'),
+            rate,
+            tax,
+            qty,
+          ],
+        );
+      }
       await client.query(
         `INSERT INTO supplier_invoice_items (
             invoice_id, category, item_name, item_code, hsn_sac, qty, unit, rate,
@@ -748,7 +1660,6 @@ app.post('/api/warehouse/receipts', async (req, res) => {
         ],
       );
 
-      // Keep item master in sync with warehouse inward receipts.
       const catalogUpdate = await client.query(
         `UPDATE catalog_items
          SET item_name = $1,
@@ -795,7 +1706,10 @@ app.post('/api/warehouse/receipts', async (req, res) => {
   } finally {
     client.release();
   }
-});
+}
+
+app.post('/api/warehouse/receipts', handleWarehouseReceipt);
+app.post('/api/warehouse/receipt', handleWarehouseReceipt);
 
 async function startServer() {
   try {
@@ -809,5 +1723,154 @@ async function startServer() {
     process.exit(1);
   }
 }
+app.get('/api/suppliers', async (_req, res) => {
+  try {
+    const result = await query(`
+      SELECT DISTINCT
+        supplier_name,
+        COALESCE(NULLIF(supplier_contact, ''), supplier_phone) AS supplier_code,
+        supplier_phone,
+        supplier_gstin,
+        supplier_address,
+        COALESCE(supplier_address, '') AS supplier_location,
+        0.0::numeric AS outstanding_balance
+      FROM supplier_invoices
+      ORDER BY supplier_name
+    `);
 
+    return res.json(result.rows);
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.get('/api/supplier-invoices/:supplierName', async (req, res) => {
+  try {
+    const result = await query(
+      `
+      SELECT
+        si.id,
+        si.invoice_no,
+        si.grand_total,
+        si.invoice_date,
+        COALESCE(SUM(p.amount), 0) AS paid_amount,
+        GREATEST(si.grand_total - COALESCE(SUM(p.amount), 0), 0) AS remaining_amount
+      FROM supplier_invoices si
+      LEFT JOIN payments p ON p.supplier_id = si.id
+      WHERE si.supplier_name = $1
+      GROUP BY si.id
+      ORDER BY si.invoice_date DESC
+      `,
+      [req.params.supplierName],
+    );
+
+    return res.json(result.rows);
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.get('/api/payments', async (_req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        p.*,
+        COALESCE(c.company_name, s.supplier_name, '') AS party_name,
+        COALESCE(o.order_code, s.invoice_no, '') AS invoice_no
+      FROM payments p
+      LEFT JOIN customers c ON c.id = p.customer_id
+      LEFT JOIN supplier_invoices s ON s.id = p.supplier_id
+      LEFT JOIN orders o ON o.id = p.invoice_id
+      ORDER BY payment_date DESC
+    `);
+
+    return res.json(result.rows);
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.post('/api/payments', async (req, res) => {
+  const {
+    voucher_no = '',
+    customer_id = null,
+    supplier_id = null,
+    invoice_id = null,
+    payment_date,
+    payment_method = '',
+    reference_no = '',
+    cheque_no = '',
+    cheque_date = null,
+    amount = 0,
+    notes = '',
+    status = 'Paid',
+  } = req.body;
+
+  try {
+    const result = await query(
+      `
+      INSERT INTO payments
+      (
+        voucher_no,
+        customer_id,
+        supplier_id,
+        invoice_id,
+        payment_date,
+        payment_method,
+        reference_no,
+        cheque_no,
+        cheque_date,
+        amount,
+        notes,
+        status
+      )
+      VALUES
+      ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      RETURNING *;
+      `,
+      [
+        voucher_no,
+        customer_id,
+        supplier_id,
+        invoice_id,
+        payment_date,
+        payment_method,
+        reference_no,
+        cheque_no,
+        cheque_date,
+        amount,
+        notes,
+        status,
+      ],
+    );
+
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
+app.get('/api/payments/customer/:customerId', async (req, res) => {
+  try {
+    const result = await query(
+      `
+      SELECT *
+      FROM payments
+      WHERE customer_id=$1
+      ORDER BY payment_date ASC
+      `,
+      [req.params.customerId],
+    );
+
+    return res.json(result.rows);
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+});
 startServer();

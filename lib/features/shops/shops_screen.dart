@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/network/backend_api.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_snackbar.dart';
 import '../../core/widgets/premium_widgets.dart';
 
 class ShopsScreen extends StatefulWidget {
@@ -44,7 +45,7 @@ class _ShopsScreenState extends State<ShopsScreen> {
   }
 
   Future<void> _showCreateCustomerDialog() async {
-    final result = await showDialog<Map<String, String>>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => const _CreateCustomerDialog(),
     );
@@ -52,20 +53,10 @@ class _ShopsScreenState extends State<ShopsScreen> {
     if (result == null) return;
 
     try {
-      await _api.createCustomer({
-        'companyName': result['companyName'],
-        'ownerName': result['ownerName'],
-        'mobile': result['mobile'],
-        'email': result['email'],
-        'gstin': result['gstin'],
-        'region': result['region'],
-        'address': result['address'],
-      });
+      await _api.createCustomer(result);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save customer in backend. ($e)')),
-      );
+      AppSnackBar.failed(message: 'Unable to save customer in backend. ($e)');
       return;
     }
 
@@ -73,8 +64,139 @@ class _ShopsScreenState extends State<ShopsScreen> {
     setState(() {
       _shopsFuture = _api.getCustomers();
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Customer saved successfully.')),
+    AppSnackBar.success(message: 'Customer saved successfully.');
+  }
+
+  Future<bool?> showDeleteCustomerDialog(
+    BuildContext context,
+    String customerName,
+  ) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: 320,
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.12),
+                  blurRadius: 30,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: 58,
+                  width: 58,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xffEAF3FF), Color(0xffD8E9FF)],
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xff2F6BFF),
+                    size: 30,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                const Text(
+                  "Delete Customer",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 8),
+
+                const Text(
+                  "Are you sure you want to delete",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+
+                const SizedBox(height: 12),
+
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xffF4F8FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xffD7E5FF)),
+                  ),
+                  child: Text(
+                    customerName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                const Text(
+                  "This action cannot be undone.",
+                  style: TextStyle(color: Colors.blueAccent, fontSize: 13),
+                ),
+
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 42),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text("Cancel"),
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xff2F6BFF),
+                          minimumSize: const Size(0, 42),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          "Delete",
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -84,36 +206,89 @@ class _ShopsScreenState extends State<ShopsScreen> {
       future: _shopsFuture,
       builder: (context, snapshot) {
         final shops = snapshot.data ?? const <Map<String, dynamic>>[];
-        final rows = shops.isEmpty
-            ? _fallbackRows
-            : shops
-                  .map(
-                    (shop) => [
-                      TableTextCell(
-                        (shop['companyName'] ?? shop['shopName'] ?? '-')
-                            .toString(),
-                        compact: true,
-                      ),
-                      TableTextCell(
-                        (shop['ownerName'] ?? '-').toString(),
-                        compact: true,
-                      ),
-                      TableTextCell(
-                        (shop['mobile'] ?? '-').toString(),
-                        compact: true,
-                      ),
-                      TableTextCell(
-                        (shop['region'] ?? '-').toString(),
-                        compact: true,
-                      ),
-                      TableTextCell(
-                        (shop['address'] ?? '-').toString(),
-                        compact: true,
-                      ),
-                      const _RowActions(),
-                    ],
-                  )
-                  .toList();
+        final rows = shops
+            .map(
+              (shop) => [
+                TableTextCell(
+                  (shop['company_name'] ?? '-').toString(),
+                  compact: true,
+                ),
+
+                TableTextCell(
+                  (shop['contact_person'] ?? '-').toString(),
+                  compact: true,
+                ),
+
+                TableTextCell(
+                  (shop['mobile'] ?? '-').toString(),
+                  compact: true,
+                ),
+
+                TableTextCell(
+                  (shop['state'] ?? shop['-']).toString(),
+                  compact: true,
+                ),
+
+                TableTextCell(
+                  [shop['address_line1'], shop['city']]
+                      .where((e) => e != null && e.toString().isNotEmpty)
+                      .join(', '),
+                  compact: true,
+                ),
+                _RowActions(
+                  shop: shop,
+                  onEdit: () async {
+                    final result = await showDialog<Map<String, dynamic>>(
+                      context: context,
+                      builder: (_) => _CreateCustomerDialog(customer: shop),
+                    );
+
+                    if (result == null) return;
+
+                    await _api.updateCustomer(shop['id'], result);
+
+                    if (!mounted) return;
+
+                    setState(() {
+                      _shopsFuture = _api.getCustomers();
+                    });
+
+                    AppSnackBar.success(
+                      message: 'Customer updated successfully',
+                    );
+                  },
+                  onDelete: () async {
+                    final confirmed = await showDeleteCustomerDialog(
+                      context,
+                      shop['company_name'] ??
+                          shop['companyName'] ??
+                          'Unknown Customer',
+                    );
+
+                    if (confirmed != true) return;
+
+                    try {
+                      await _api.deleteCustomer(shop['id']);
+
+                      if (!mounted) return;
+
+                      setState(() {
+                        _shopsFuture = _api.getCustomers();
+                      });
+
+                      AppSnackBar.success(
+                        message: 'Customer deleted successfully',
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+
+                      AppSnackBar.failed(message: e.toString());
+                    }
+                  },
+                ),
+              ],
+            )
+            .toList();
 
         return SingleChildScrollView(
           key: const ValueKey('shops'),
@@ -136,7 +311,7 @@ class _ShopsScreenState extends State<ShopsScreen> {
               SimpleTable(
                 headers: const [
                   'Company / Shop',
-                  'Owner Name',
+                  'Contact Person',
                   'Mobile',
                   'Region',
                   'Address',
@@ -154,35 +329,12 @@ class _ShopsScreenState extends State<ShopsScreen> {
   }
 }
 
-final List<List<Widget>> _fallbackRows = const [
-  [
-    TableTextCell('Sharma Store', compact: true),
-    TableTextCell('Rajesh Sharma', compact: true),
-    TableTextCell('9876543210', compact: true),
-    TableTextCell('North', compact: true),
-    TableTextCell('123, MG Road, Delhi', compact: true),
-    _RowActions(),
-  ],
-  [
-    TableTextCell('Gupta General Store', compact: true),
-    TableTextCell('Amit Gupta', compact: true),
-    TableTextCell('9876543211', compact: true),
-    TableTextCell('North', compact: true),
-    TableTextCell('56, Model Town, Delhi', compact: true),
-    _RowActions(),
-  ],
-  [
-    TableTextCell('Kumar Provision', compact: true),
-    TableTextCell('Suresh Kumar', compact: true),
-    TableTextCell('9876543212', compact: true),
-    TableTextCell('South', compact: true),
-    TableTextCell('18, Bannerghatta Road', compact: true),
-    _RowActions(),
-  ],
-];
-
 class _CreateCustomerDialog extends StatefulWidget {
-  const _CreateCustomerDialog();
+  const _CreateCustomerDialog({super.key, this.customer});
+
+  final Map<String, dynamic>? customer;
+
+  bool get isEdit => customer != null;
 
   @override
   State<_CreateCustomerDialog> createState() => _CreateCustomerDialogState();
@@ -206,6 +358,41 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
   final _addressLine2Controller = TextEditingController();
   final _cityController = TextEditingController();
   final _pinCodeController = TextEditingController();
+  final _customerCodeController = TextEditingController(
+    text: 'CUS-${DateTime.now().millisecondsSinceEpoch}',
+  );
+
+  final _customerCategoryController = TextEditingController();
+  final _industryController = TextEditingController();
+  final _businessSinceController = TextEditingController();
+  final _areaController = TextEditingController();
+  final _landmarkController = TextEditingController();
+  final _countryController = TextEditingController(text: 'India');
+  final _billingAddressController = TextEditingController();
+  final _shippingAddressController = TextEditingController();
+  final _contactPersonController = TextEditingController();
+  final _designationController = TextEditingController();
+  final _departmentController = TextEditingController();
+  final _alternateMobileController = TextEditingController();
+  final _officePhoneController = TextEditingController();
+  final _whatsappController = TextEditingController();
+  final _gstTypeController = TextEditingController();
+  final _fssaiController = TextEditingController();
+  final _drugLicenseController = TextEditingController();
+  final _msmeController = TextEditingController();
+  final _cinController = TextEditingController();
+  final _iecController = TextEditingController();
+  final _creditDaysController = TextEditingController();
+  final _creditLimitController = TextEditingController();
+  final _priceListController = TextEditingController();
+  final _salesmanController = TextEditingController();
+  final _salesRegionController = TextEditingController();
+  final _gstCertificateController = TextEditingController();
+  final _panDocumentController = TextEditingController();
+  final _tradeLicenseController = TextEditingController();
+  final _addressProofController = TextEditingController();
+  final _agreementController = TextEditingController();
+  final _otherDocumentController = TextEditingController();
 
   String? _businessType;
   String? _state;
@@ -222,6 +409,61 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
     _CustomerDialogSection.documents: GlobalKey(),
     _CustomerDialogSection.notes: GlobalKey(),
   };
+  String? _gstRegistrationType;
+  String? _paymentTerm;
+  String? _paymentMode;
+  String? _currency;
+
+  final List<String> _paymentTerms = const [
+    'Advance Payment',
+    'Cash on Delivery',
+    'Net 7 Days',
+    'Net 15 Days',
+    'Net 30 Days',
+    'Net 45 Days',
+    'Net 60 Days',
+  ];
+
+  final List<String> _paymentModes = const [
+    'Cash',
+    'UPI',
+    'Bank Transfer',
+    'Cheque',
+    'Credit',
+  ];
+
+  final List<String> _currencies = const ['INR', 'USD', 'AED', 'EUR'];
+  final List<String> _gstRegistrationTypes = const [
+    'Regular',
+    'Composition',
+    'Unregistered',
+    'SEZ',
+    'Export',
+  ];
+  final List<String> _customerCategories = const [
+    'Retailer',
+    'Distributor',
+    'Dealer',
+    'Wholesaler',
+    'Corporate',
+    'Online Customer',
+  ];
+
+  final List<String> _industries = const [
+    'Garments',
+    'Textiles',
+    'Electronics',
+    'Super Market',
+    'Pharmacy',
+    'FMCG',
+    'Restaurant',
+    'Construction',
+    'Automobile',
+    'Others',
+  ];
+
+  String? _customerCategory;
+  String? _industry;
 
   final List<String> _businessTypes = const [
     'Retailer',
@@ -239,6 +481,78 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
     'Maharashtra',
     'Delhi',
   ];
+  @override
+  void initState() {
+    super.initState();
+
+    if (!widget.isEdit) return;
+
+    final c = widget.customer!;
+
+    _customerCodeController.text = c['customer_code'] ?? '';
+    _companyController.text = c['company_name'] ?? '';
+    _shortNameController.text = c['short_name'] ?? '';
+    _contactPersonController.text = c['contact_person'] ?? '';
+    _mobileController.text = c['mobile'] ?? '';
+    _emailController.text = c['email'] ?? '';
+    _gstinController.text = c['gstin'] ?? '';
+    _panController.text = c['pan'] ?? '';
+    _websiteController.text = c['website'] ?? '';
+    _registrationController.text = c['registration_number'] ?? '';
+    _paymentTerm = c['payment_term'];
+    _paymentMode = c['payment_mode'];
+    _currency = c['currency'];
+    _gstRegistrationType = c['gst_registration_type'];
+    _state = c['state'];
+    _sameBillingAddress = c['same_billing_address'] ?? true;
+    _customerCategory = c['customer_category'];
+    _industry = c['industry'];
+    _businessType = c['business_type'];
+    _addressLine1Controller.text = c['address_line_1'] ?? '';
+    _addressLine2Controller.text = c['address_line_2'] ?? '';
+    _cityController.text = c['city'] ?? '';
+    _pinCodeController.text = c['pin_code'] ?? '';
+    _billingAddressController.text = c['billing_address'] ?? '';
+    _shippingAddressController.text = c['shipping_address'] ?? '';
+    _ownerController.text = c['owner_name'] ?? '';
+    _designationController.text = c['designation'] ?? '';
+    _departmentController.text = c['department'] ?? '';
+    _alternateMobileController.text = c['alternate_mobile'] ?? '';
+    _officePhoneController.text = c['office_phone'] ?? '';
+    _whatsappController.text = c['whatsapp_number'] ?? '';
+    _fssaiController.text = c['fssai_license'] ?? '';
+    _drugLicenseController.text = c['drug_license'] ?? '';
+    _msmeController.text = c['msme_number'] ?? '';
+    _cinController.text = c['cin_number'] ?? '';
+    _iecController.text = c['iec_code'] ?? '';
+    _creditDaysController.text = c['credit_days']?.toString() ?? '';
+    _creditLimitController.text = c['credit_limit']?.toString() ?? '';
+    _priceListController.text = c['price_list'] ?? '';
+    _salesmanController.text = c['assigned_salesman'] ?? '';
+    _salesRegionController.text = c['sales_region'] ?? '';
+    _gstCertificateController.text = c['gst_certificate'] ?? '';
+    _panDocumentController.text = c['pan_document'] ?? '';
+    _tradeLicenseController.text = c['trade_license'] ?? '';
+    _addressProofController.text = c['address_proof'] ?? '';
+    _agreementController.text = c['customer_agreement'] ?? '';
+    _otherDocumentController.text = c['other_documents'] ?? '';
+    _notesController.text = c['notes'] ?? '';
+    _areaController.text = c['area'] ?? '';
+    _landmarkController.text = c['landmark'] ?? '';
+    _countryController.text = c['country'] ?? 'India';
+    _businessSinceController.text = c['business_since'] ?? '';
+    _customerCategoryController.text = c['customer_category'] ?? '';
+    _industryController.text = c['industry'] ?? '';
+    _paymentTermsController.text = c['payment_terms'] ?? '';
+    _documentsController.text = c['documents'] ?? '';
+    _notesController.text = c['notes'] ?? '';
+    _ownerController.text = c['owner_name'] ?? '';
+    _mobileController.text = c['mobile'] ?? '';
+    _emailController.text = c['email'] ?? '';
+    _gstinController.text = c['gstin'] ?? '';
+    _panController.text = c['pan'] ?? '';
+    _websiteController.text = c['website'] ?? '';
+  }
 
   @override
   void dispose() {
@@ -328,17 +642,19 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Add Customer / Company Information',
+                            widget.isEdit
+                                ? 'Edit Customer'
+                                : 'Add Customer / Company Information',
                             style: Theme.of(context).textTheme.titleLarge
                                 ?.copyWith(
-                                  fontSize: 33,
+                                  fontSize: 24,
                                   fontWeight: FontWeight.w800,
                                 ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Enter company details to create a new customer',
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ),
@@ -367,8 +683,8 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                       child: Column(
                         children: [
                           _StepMenuTile(
-                            label: 'Company Details',
-                            icon: Icons.apartment_rounded,
+                            label: 'Company Profile',
+                            icon: Icons.business_rounded,
                             selected:
                                 _activeSection ==
                                 _CustomerDialogSection.companyDetails,
@@ -377,20 +693,10 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                             ),
                           ),
                           const SizedBox(height: 8),
+
                           _StepMenuTile(
-                            label: 'Contact Person',
-                            icon: Icons.person_rounded,
-                            selected:
-                                _activeSection ==
-                                _CustomerDialogSection.contactPerson,
-                            onTap: () => _selectSection(
-                              _CustomerDialogSection.contactPerson,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _StepMenuTile(
-                            label: 'Address',
-                            icon: Icons.location_on_rounded,
+                            label: 'Locations',
+                            icon: Icons.location_city_rounded,
                             selected:
                                 _activeSection ==
                                 _CustomerDialogSection.address,
@@ -399,8 +705,21 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                           ),
                           const SizedBox(height: 8),
                           _StepMenuTile(
-                            label: 'Business Details',
-                            icon: Icons.badge_rounded,
+                            label: 'Contacts',
+                            icon: Icons.contacts_rounded,
+                            selected:
+                                _activeSection ==
+                                _CustomerDialogSection.contactPerson,
+                            onTap: () => _selectSection(
+                              _CustomerDialogSection.contactPerson,
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          _StepMenuTile(
+                            label: 'Tax & Business',
+                            icon: Icons.receipt_long_rounded,
                             selected:
                                 _activeSection ==
                                 _CustomerDialogSection.businessDetails,
@@ -409,8 +728,9 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                             ),
                           ),
                           const SizedBox(height: 8),
+
                           _StepMenuTile(
-                            label: 'Payment & Credit',
+                            label: 'Finance',
                             icon: Icons.account_balance_wallet_rounded,
                             selected:
                                 _activeSection ==
@@ -420,9 +740,10 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                             ),
                           ),
                           const SizedBox(height: 8),
+
                           _StepMenuTile(
-                            label: 'Documents',
-                            icon: Icons.description_rounded,
+                            label: 'Attachments',
+                            icon: Icons.attach_file_rounded,
                             selected:
                                 _activeSection ==
                                 _CustomerDialogSection.documents,
@@ -431,6 +752,7 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                             ),
                           ),
                           const SizedBox(height: 8),
+
                           _StepMenuTile(
                             label: 'Notes',
                             icon: Icons.sticky_note_2_rounded,
@@ -471,57 +793,94 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                             ),
                             const SizedBox(height: 12),
                             _twoFields(
+                              _field('Customer Code', _customerCodeController),
                               _field(
                                 'Company / Business Name *',
                                 _companyController,
                                 required: true,
                               ),
-                              _field(
-                                'Short Name (Optional)',
-                                _shortNameController,
-                              ),
                             ),
                             const SizedBox(height: 10),
+
                             _threeFields(
+                              _field('Short Name', _shortNameController),
+
+                              _dropdownField(
+                                label: 'Customer Category *',
+                                value: _customerCategory,
+                                items: _customerCategories,
+                                onChanged: (v) {
+                                  setState(() => _customerCategory = v);
+                                },
+                                required: true,
+                              ),
+
                               _dropdownField(
                                 label: 'Business Type *',
                                 value: _businessType,
                                 items: _businessTypes,
-                                onChanged: (v) =>
-                                    setState(() => _businessType = v),
+                                onChanged: (v) {
+                                  setState(() => _businessType = v);
+                                },
                                 required: true,
                               ),
-                              _field('GST Number', _gstinController),
-                              _field('PAN Number (Optional)', _panController),
                             ),
                             const SizedBox(height: 10),
+
                             _threeFields(
-                              _field(
-                                'Owner Name *',
-                                _ownerController,
-                                required: true,
+                              _dropdownField(
+                                label: 'Industry',
+                                value: _industry,
+                                items: _industries,
+                                onChanged: (v) {
+                                  setState(() => _industry = v);
+                                },
                               ),
+
+                              _field(
+                                'Business Since',
+                                _businessSinceController,
+                              ),
+
+                              _field('Website', _websiteController),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            _threeFields(
+                              _field('GST Number', _gstinController),
+
+                              _field('PAN Number', _panController),
+
+                              _field(
+                                'Registration Number',
+                                _registrationController,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+
+                            _threeFields(
                               _field(
                                 'Company Email',
                                 _emailController,
                                 keyboardType: TextInputType.emailAddress,
                               ),
+
                               _field(
-                                'Phone Number *',
+                                'Phone Number',
                                 _mobileController,
                                 keyboardType: TextInputType.phone,
                                 required: true,
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                            _twoFields(
-                              _field('Website (Optional)', _websiteController),
+
                               _field(
-                                'Business Registration Number (Optional)',
-                                _registrationController,
+                                'Alternate Mobile',
+                                TextEditingController(),
+                                keyboardType: TextInputType.phone,
                               ),
                             ),
                             const SizedBox(height: 14),
+
                             Divider(
                               color: AppColors.border.withValues(alpha: 0.9),
                               height: 1,
@@ -537,20 +896,27 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 10),
+
                             _twoFields(
                               _field(
                                 'Address Line 1 *',
                                 _addressLine1Controller,
                                 required: true,
                               ),
-                              _field(
-                                'Address Line 2 (Optional)',
-                                _addressLine2Controller,
-                              ),
+                              _field('Address Line 2', _addressLine2Controller),
                             ),
+
                             const SizedBox(height: 10),
+
                             _threeFields(
+                              _field('Area / Locality', _areaController),
+                              _field('Landmark', _landmarkController),
                               _field('City *', _cityController, required: true),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            _threeFields(
                               _dropdownField(
                                 label: 'State *',
                                 value: _state,
@@ -558,6 +924,7 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                 onChanged: (v) => setState(() => _state = v),
                                 required: true,
                               ),
+                              _field('Country', _countryController),
                               _field(
                                 'Pin Code *',
                                 _pinCodeController,
@@ -565,25 +932,51 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                 required: true,
                               ),
                             ),
-                            const SizedBox(height: 8),
+
+                            const SizedBox(height: 10),
+
+                            _twoFields(
+                              _field(
+                                'Billing Address',
+                                _billingAddressController,
+                                maxLines: 2,
+                              ),
+                              _field(
+                                'Shipping Address',
+                                _shippingAddressController,
+                                maxLines: 2,
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
+
                             Row(
                               children: [
                                 const Text(
-                                  'Use same address for Billing',
-                                  style: TextStyle(
-                                    color: AppColors.text,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  'Billing address same as shipping',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(width: 8),
-                                Switch.adaptive(
-                                  value: _sameBillingAddress,
-                                  onChanged: (value) {
-                                    setState(() => _sameBillingAddress = value);
-                                  },
+                                Transform.scale(
+                                  scale:
+                                      0.50, // Try 0.75 or 0.70 if you want it even smaller
+                                  child: Switch(
+                                    value: _sameBillingAddress,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _sameBillingAddress = value;
+
+                                        if (value) {
+                                          _shippingAddressController.text =
+                                              _billingAddressController.text;
+                                        }
+                                      });
+                                    },
+                                  ),
                                 ),
                               ],
                             ),
+
                             const SizedBox(height: 10),
                             KeyedSubtree(
                               key:
@@ -600,23 +993,55 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                         ?.copyWith(fontWeight: FontWeight.w800),
                                   ),
                                   const SizedBox(height: 10),
+
                                   _threeFields(
                                     _field(
-                                      'Owner Name *',
-                                      _ownerController,
+                                      'Contact Person Name *',
+                                      _contactPersonController,
                                       required: true,
                                     ),
                                     _field(
-                                      'Mobile *',
+                                      'Designation',
+                                      _designationController,
+                                    ),
+                                    _field('Department', _departmentController),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  _threeFields(
+                                    _field(
+                                      'Mobile Number *',
                                       _mobileController,
                                       keyboardType: TextInputType.phone,
                                       required: true,
                                     ),
                                     _field(
-                                      'Email',
+                                      'Alternate Mobile',
+                                      _alternateMobileController,
+                                      keyboardType: TextInputType.phone,
+                                    ),
+                                    _field(
+                                      'Office Phone',
+                                      _officePhoneController,
+                                      keyboardType: TextInputType.phone,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  _threeFields(
+                                    _field(
+                                      'Email Address',
                                       _emailController,
                                       keyboardType: TextInputType.emailAddress,
                                     ),
+                                    _field(
+                                      'WhatsApp Number',
+                                      _whatsappController,
+                                      keyboardType: TextInputType.phone,
+                                    ),
+                                    const SizedBox(),
                                   ),
                                 ],
                               ),
@@ -636,14 +1061,50 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                         .titleMedium
                                         ?.copyWith(fontWeight: FontWeight.w800),
                                   ),
+
                                   const SizedBox(height: 10),
+
                                   _threeFields(
+                                    _dropdownField(
+                                      label: 'GST Registration Type',
+                                      value: _gstRegistrationType,
+                                      items: _gstRegistrationTypes,
+                                      onChanged: (v) {
+                                        setState(
+                                          () => _gstRegistrationType = v,
+                                        );
+                                      },
+                                    ),
                                     _field('GST Number', _gstinController),
                                     _field('PAN Number', _panController),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  _threeFields(
                                     _field(
-                                      'Registration Number',
+                                      'Business Registration No.',
                                       _registrationController,
                                     ),
+                                    _field(
+                                      'MSME / UDYAM Number',
+                                      _msmeController,
+                                    ),
+                                    _field('CIN Number', _cinController),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  _threeFields(
+                                    _field(
+                                      'FSSAI License No.',
+                                      _fssaiController,
+                                    ),
+                                    _field(
+                                      'Drug License No.',
+                                      _drugLicenseController,
+                                    ),
+                                    _field('IEC Code', _iecController),
                                   ),
                                 ],
                               ),
@@ -663,11 +1124,68 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                         .titleMedium
                                         ?.copyWith(fontWeight: FontWeight.w800),
                                   ),
+
                                   const SizedBox(height: 10),
-                                  _field(
-                                    'Payment Terms (Optional)',
-                                    _paymentTermsController,
-                                    maxLines: 2,
+
+                                  _threeFields(
+                                    _dropdownField(
+                                      label: 'Payment Terms',
+                                      value: _paymentTerm,
+                                      items: _paymentTerms,
+                                      onChanged: (v) {
+                                        setState(() => _paymentTerm = v);
+                                      },
+                                    ),
+
+                                    _dropdownField(
+                                      label: 'Preferred Payment Mode',
+                                      value: _paymentMode,
+                                      items: _paymentModes,
+                                      onChanged: (v) {
+                                        setState(() => _paymentMode = v);
+                                      },
+                                    ),
+
+                                    _dropdownField(
+                                      label: 'Currency',
+                                      value: _currency,
+                                      items: _currencies,
+                                      onChanged: (v) {
+                                        setState(() => _currency = v);
+                                      },
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  _threeFields(
+                                    _field(
+                                      'Credit Days',
+                                      _creditDaysController,
+                                      keyboardType: TextInputType.number,
+                                    ),
+
+                                    _field(
+                                      'Credit Limit',
+                                      _creditLimitController,
+                                      keyboardType: TextInputType.number,
+                                    ),
+
+                                    _field('Price List', _priceListController),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  _twoFields(
+                                    _field(
+                                      'Assigned Salesman',
+                                      _salesmanController,
+                                    ),
+
+                                    _field(
+                                      'Sales Region',
+                                      _salesRegionController,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -687,11 +1205,43 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                                         .titleMedium
                                         ?.copyWith(fontWeight: FontWeight.w800),
                                   ),
+
                                   const SizedBox(height: 10),
-                                  _field(
-                                    'Document Reference (Optional)',
-                                    _documentsController,
-                                    maxLines: 2,
+
+                                  _threeFields(
+                                    _field(
+                                      'GST Certificate',
+                                      _gstCertificateController,
+                                    ),
+
+                                    _field(
+                                      'PAN Document',
+                                      _panDocumentController,
+                                    ),
+
+                                    _field(
+                                      'Trade License',
+                                      _tradeLicenseController,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 10),
+
+                                  _threeFields(
+                                    _field(
+                                      'Address Proof',
+                                      _addressProofController,
+                                    ),
+
+                                    _field(
+                                      'Customer Agreement',
+                                      _agreementController,
+                                    ),
+
+                                    _field(
+                                      'Other Documents',
+                                      _otherDocumentController,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -738,21 +1288,21 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                   children: [
                     Row(
                       children: [
-                        Checkbox(
-                          value: _addAnotherAfterSave,
-                          onChanged: (value) {
-                            setState(
-                              () => _addAnotherAfterSave = value ?? false,
-                            );
-                          },
-                        ),
-                        const Text(
-                          'Add Another After Save',
-                          style: TextStyle(
-                            color: AppColors.textMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        // Checkbox(
+                        //   value: _addAnotherAfterSave,
+                        //   onChanged: (value) {
+                        //     setState(
+                        //       () => _addAnotherAfterSave = value ?? false,
+                        //     );
+                        //   },
+                        // ),
+                        // const Text(
+                        //   'Add Another After Save',
+                        //   style: TextStyle(
+                        //     color: AppColors.textMuted,
+                        //     fontWeight: FontWeight.w600,
+                        //   ),
+                        // ),
                       ],
                     ),
                     const Spacer(),
@@ -773,17 +1323,80 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                         ].where((e) => e.isNotEmpty).join(', ');
 
                         Navigator.of(context).pop({
+                          // Company
+                          'customerCode': _customerCodeController.text.trim(),
                           'companyName': _companyController.text.trim(),
-                          'ownerName': _ownerController.text.trim(),
+                          'shortName': _shortNameController.text.trim(),
+                          'customerCategory': _customerCategory ?? '',
+                          'businessType': _businessType ?? '',
+                          'industry': _industry ?? '',
+                          'businessSince': _businessSinceController.text.trim(),
+                          'website': _websiteController.text.trim(),
+
+                          // Contact
+                          'contactPerson': _contactPersonController.text.trim(),
+                          'designation': _designationController.text.trim(),
+                          'department': _departmentController.text.trim(),
                           'mobile': _mobileController.text.trim(),
+                          'alternateMobile': _alternateMobileController.text
+                              .trim(),
+                          'officePhone': _officePhoneController.text.trim(),
+                          'whatsapp': _whatsappController.text.trim(),
                           'email': _emailController.text.trim(),
+
+                          // Address
+                          'addressLine1': _addressLine1Controller.text.trim(),
+                          'addressLine2': _addressLine2Controller.text.trim(),
+                          'area': _areaController.text.trim(),
+                          'landmark': _landmarkController.text.trim(),
+                          'city': _cityController.text.trim(),
+                          'state': _state ?? '',
+                          'country': _countryController.text.trim(),
+                          'pinCode': _pinCodeController.text.trim(),
+                          'billingAddress': _billingAddressController.text
+                              .trim(),
+                          'shippingAddress': _shippingAddressController.text
+                              .trim(),
+
+                          // Business
+                          'gstRegistrationType': _gstRegistrationType ?? '',
                           'gstin': _gstinController.text.trim(),
-                          'region': (_state ?? '').trim(),
-                          'address': address,
+                          'pan': _panController.text.trim(),
+                          'registrationNo': _registrationController.text.trim(),
+                          'msmeNo': _msmeController.text.trim(),
+                          'cinNo': _cinController.text.trim(),
+                          'fssaiNo': _fssaiController.text.trim(),
+                          'drugLicenseNo': _drugLicenseController.text.trim(),
+                          'iecCode': _iecController.text.trim(),
+
+                          // Finance
+                          'paymentTerms': _paymentTerm ?? '',
+                          'paymentMode': _paymentMode ?? '',
+                          'currency': _currency ?? 'INR',
+                          'creditDays':
+                              int.tryParse(_creditDaysController.text) ?? 0,
+                          'creditLimit':
+                              double.tryParse(_creditLimitController.text) ?? 0,
+                          'priceList': _priceListController.text.trim(),
+                          'assignedSalesman': _salesmanController.text.trim(),
+                          'salesRegion': _salesRegionController.text.trim(),
+
+                          // Documents
+                          'gstCertificate': _gstCertificateController.text
+                              .trim(),
+                          'panDocument': _panDocumentController.text.trim(),
+                          'tradeLicense': _tradeLicenseController.text.trim(),
+                          'addressProof': _addressProofController.text.trim(),
+                          'agreementDocument': _agreementController.text.trim(),
+                          'otherDocument': _otherDocumentController.text.trim(),
+
+                          // Others
+                          'notes': _notesController.text.trim(),
+                          'status': 'Active',
                         });
                       },
                       icon: const Icon(Icons.save_rounded, size: 16),
-                      label: const Text('Save Customer'),
+                      label: Text(widget.isEdit ? 'Update' : 'Save'),
                     ),
                   ],
                 ),
@@ -925,15 +1538,42 @@ enum _CustomerDialogSection {
 }
 
 class _RowActions extends StatelessWidget {
-  const _RowActions();
+  const _RowActions({
+    super.key,
+    required this.shop,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Map<String, dynamic> shop;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Icon(Icons.edit_outlined, size: 18),
-        SizedBox(width: 10),
-        Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.danger),
+        InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: onEdit,
+          child: const Padding(
+            padding: EdgeInsets.all(4),
+            child: Icon(Icons.edit_outlined, size: 18),
+          ),
+        ),
+        const SizedBox(width: 10),
+        InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: onDelete,
+          child: const Padding(
+            padding: EdgeInsets.all(4),
+            child: Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: AppColors.danger,
+            ),
+          ),
+        ),
       ],
     );
   }

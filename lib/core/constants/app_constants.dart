@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  static const String appName = 'Sales ERP';
+  static const String appName = 'WAREHOUSE';
   static const String appSubtitle = 'Field Sales & Warehouse Management System';
   static const String companyName = 'Sales ERP Private Limited';
   static const String adminName = 'Admin User';

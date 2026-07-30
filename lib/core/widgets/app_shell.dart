@@ -1,3 +1,5 @@
+import 'package:desktop/features/accounts/ledger_screen.dart';
+import 'package:desktop/features/accounts/payment_entry/payment_entry_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../features/dashboard/dashboard_screen.dart';
@@ -29,12 +31,21 @@ class _DesktopEntryState extends State<DesktopEntry> {
   int _openCustomerDialogSignal = 0;
 
   String _titleForIndex(int index) {
-    for (final item in appNavItems) {
-      if (item.index == index) {
-        return item.label;
-      }
+    switch (index) {
+      case 10:
+        return "Payment Entry";
+
+      case 11:
+        return "Ledger";
+
+      default:
+        for (final item in appNavItems) {
+          if (item.index == index) {
+            return item.label;
+          }
+        }
+        return "Dashboard";
     }
-    return 'Dashboard';
   }
 
   Widget _screenForIndex(int index) {
@@ -59,6 +70,10 @@ class _DesktopEntryState extends State<DesktopEntry> {
         return const UsersScreen();
       case 9:
         return const SettingsScreen();
+      case 10:
+        return const PaymentEntryScreen();
+      case 11:
+        return const LedgerScreen();
       default:
         return const DashboardScreen();
     }
@@ -103,10 +118,7 @@ class _DesktopEntryState extends State<DesktopEntry> {
                     layoutBuilder: (currentChild, previousChildren) {
                       return Stack(
                         alignment: Alignment.topLeft,
-                        children: <Widget>[
-                          ...previousChildren,
-                          if (currentChild != null) currentChild,
-                        ],
+                        children: <Widget>[...previousChildren, ?currentChild],
                       );
                     },
                     child: _screenForIndex(_selectedIndex),
@@ -121,18 +133,107 @@ class _DesktopEntryState extends State<DesktopEntry> {
   }
 }
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends StatefulWidget {
   const _Sidebar({
+    Key? key,
     required this.selectedIndex,
     required this.onSelected,
     required this.onNewOrderTap,
     required this.onCreateCustomerTap,
-  });
+  }) : super(key: key);
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
   final VoidCallback onNewOrderTap;
   final VoidCallback onCreateCustomerTap;
+
+  @override
+  State<_Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<_Sidebar> {
+  bool _accountsExpanded = false;
+  Widget _subMenu(String title, IconData icon, int index) {
+    final selected = widget.selectedIndex == index;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 20, bottom: 2),
+      child: ListTile(
+        dense: true,
+        leading: Icon(
+          icon,
+          size: 12,
+          color: selected ? Colors.white : Colors.white70,
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.white70,
+            fontSize: 11,
+          ),
+        ),
+        onTap: () => widget.onSelected(index),
+      ),
+    );
+  }
+
+  Widget _buildAccountsMenu() {
+    return Column(
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(11),
+            onTap: () {
+              setState(() {
+                _accountsExpanded = !_accountsExpanded;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance,
+                    color: Colors.white70,
+                    size: 17,
+                  ),
+                  const SizedBox(width: 11),
+                  const Expanded(
+                    child: Text(
+                      "Accounts",
+                      style: TextStyle(
+                        color: Color.fromARGB(179, 232, 231, 231),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _accountsExpanded ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.white70,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 200),
+          crossFadeState: _accountsExpanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          firstChild: const SizedBox.shrink(),
+          secondChild: Column(
+            children: [
+              _subMenu("Payment Entry", Icons.payments, 10),
+              _subMenu("Ledger", Icons.receipt_long, 11),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -206,80 +307,74 @@ class _Sidebar extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Column(
-              children: appNavItems.map((item) {
-                final selected = item.index == selectedIndex;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(11),
-                      onTap: () => onSelected(item.index),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 11,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: selected
-                              ? const Color(0xFF2F6FFF)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(11),
-                          boxShadow: selected
-                              ? const [
-                                  BoxShadow(
-                                    color: Color(0x401E56D8),
-                                    blurRadius: 14,
-                                    offset: Offset(0, 6),
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              item.icon,
-                              color: selected
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.68),
-                              size: 17,
-                            ),
-                            const SizedBox(width: 11),
-                            Expanded(
-                              child: Text(
-                                item.label,
-                                style: TextStyle(
-                                  color: selected
-                                      ? Colors.white
-                                      : Colors.white.withValues(alpha: 0.82),
-                                  fontWeight: selected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                            if (selected)
-                              const Icon(
-                                Icons.keyboard_arrow_right_rounded,
-                                color: Colors.white,
-                                size: 17,
-                              ),
-                          ],
+       Expanded(
+  child: Scrollbar(
+    thumbVisibility: true,
+    child: ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      children: [
+
+        ...appNavItems.map((item) {
+          final selected = item.index == widget.selectedIndex;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(11),
+                onTap: () => widget.onSelected(item.index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? const Color(0xFF2F6FFF)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        item.icon,
+                        color: selected
+                            ? Colors.white
+                            : Colors.white70,
+                        size: 17,
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Text(
+                          item.label,
+                          style: TextStyle(
+                            color: selected
+                                ? Colors.white
+                                : Colors.white70,
+                            fontWeight: selected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                );
-              }).toList(),
+                ),
+              ),
             ),
-          ),
+          );
+        }),
 
-          const Spacer(),
+
+        _buildAccountsMenu(),
+
+      ],
+    ),
+  ),
+),
+          // const Spacer(),
 
           // ---------- Quick actions ----------
           Padding(
@@ -310,13 +405,13 @@ class _Sidebar extends StatelessWidget {
                   _QuickActionTile(
                     icon: Icons.add_box_outlined,
                     label: 'New Order',
-                    onTap: onNewOrderTap,
+                    onTap: widget.onNewOrderTap,
                   ),
                   const SizedBox(height: 5),
                   _QuickActionTile(
                     icon: Icons.storefront_outlined,
                     label: 'Create Customer',
-                    onTap: onCreateCustomerTap,
+                    onTap: widget.onCreateCustomerTap,
                   ),
                   const SizedBox(height: 5),
                   const _QuickActionTile(
@@ -341,7 +436,9 @@ class _Sidebar extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.09),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -430,7 +527,11 @@ class _QuickActionTile extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, size: 13.5, color: Colors.white.withValues(alpha: 0.85)),
+              Icon(
+                icon,
+                size: 13.5,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
               const SizedBox(width: 8),
               Text(
                 label,
@@ -473,16 +574,16 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceSoft,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: const Icon(Icons.menu_rounded, size: 16),
-          ),
+          // Container(
+          //   width: 30,
+          //   height: 30,
+          //   decoration: BoxDecoration(
+          //     color: AppColors.surfaceSoft,
+          //     borderRadius: BorderRadius.circular(9),
+          //     border: Border.all(color: AppColors.border),
+          //   ),
+          //   // child: const Icon(Icons.menu_rounded, size: 16),
+          // ),
           const SizedBox(width: 12),
           Text(
             title,
@@ -499,6 +600,7 @@ class _TopBar extends StatelessWidget {
           const _IconBubble(icon: Icons.fullscreen_rounded),
           const SizedBox(width: 8),
           PopupMenuButton<String>(
+            color: Colors.white,
             tooltip: 'Admin menu',
             onSelected: (value) {
               if (value == 'logout') {
@@ -550,7 +652,6 @@ class _TopBar extends StatelessWidget {
     );
   }
 }
-
 
 class _IconBubble extends StatelessWidget {
   const _IconBubble({required this.icon, this.hasDot = false});

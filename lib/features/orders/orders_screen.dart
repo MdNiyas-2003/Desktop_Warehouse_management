@@ -1,8 +1,9 @@
+import 'package:desktop/core/widgets/app_snackbar.dart';
+import 'package:desktop/features/warehouse/services/category_service.dart';
 import 'package:flutter/material.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-
 import '../../core/network/backend_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/premium_widgets.dart';
@@ -49,40 +50,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
       });
     }
   }
-Future<void> _createOrderClicked() async {
-  final drafts = await _api.getDraftOrders();
 
-  if (drafts.isNotEmpty) {
-    final result = await showDialog(
-      context: context,
-      builder: (_) => const DraftChoiceDialog(),
-    );
-
-    if (result == "draft") {
-      // Open latest draft
-    } else if (result == "new") {
-      await _showCreateOrderDialog();
-    }
-  } else {
-    await _showCreateOrderDialog();
-  }
-}
-  Future<void> _showCreateOrderDialog({
-  String? draftId,
-}) async {
+  Future<void> _showCreateOrderDialog({String? draftId}) async {
     final api = _api;
     final customers = <_CustomerProfile>[];
     final catalogMap = <String, _CatalogItem>{};
     Map<String, dynamic>? draftData;
 
-if (draftId != null) {
-  draftData = await _api.getDraftOrderById(draftId);
-}
+    if (draftId != null) {
+      draftData = await _api.getDraftOrderById(draftId);
+    }
 
     try {
       final customersRaw = await api.getCustomers();
       for (final row in customersRaw) {
         final customer = _CustomerProfile.fromMap(row);
+
+        print("RAW: $row");
+        print("companyName: '${customer.companyName}'");
+        print("Customer Count: ${customersRaw.length}");
         if (customer.companyName.trim().isNotEmpty) {
           customers.add(customer);
         }
@@ -98,24 +84,15 @@ if (draftId != null) {
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Unable to load API data. Check backend server and DB. ($e)',
-          ),
-        ),
+      AppSnackBar.failed(
+        message: 'Unable to load API data. Check backend server and DB. ($e)',
       );
       return;
     }
-
     if (customers.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No customers found in backend. Create customer first.',
-          ),
-        ),
+      AppSnackBar.warning(
+        message: 'No customers found in backend. Create customer first.',
       );
       return;
     }
@@ -135,11 +112,11 @@ if (draftId != null) {
     final draft = await showDialog<_CreateOrderDraft>(
       context: context,
       barrierDismissible: false,
-    builder: (context) => _CreateOrderDialog(
-      customers: customers,
-      catalog: catalog,
-      draftData: draftData,
-),
+      builder: (context) => _CreateOrderDialog(
+        customers: customers,
+        catalog: catalog,
+        draftData: draftData,
+      ),
     );
 
     if (draft == null) return;
@@ -161,8 +138,9 @@ if (draftId != null) {
         'salesmanName': draft.salesmanName,
         'amount': totalAmount,
         'total': totalAmount,
-'status': draft.isDraft ? 'Draft' : 'Pending',
-'isDraft': draft.isDraft,        'productsCount': draft.items.length,
+        'status': draft.isDraft ? 'Draft' : 'Pending',
+        'isDraft': draft.isDraft,
+        'productsCount': draft.items.length,
         'quantity': totalQty,
         'notes': draft.notes,
         'customer': {
@@ -188,9 +166,7 @@ if (draftId != null) {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to create order in backend. ($e)')),
-      );
+      AppSnackBar.failed(message: 'Unable to create order in backend. ($e)');
       return;
     }
 
@@ -198,9 +174,7 @@ if (draftId != null) {
     setState(() {
       _ordersFuture = _loadOrders();
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Order created successfully.')),
-    );
+    AppSnackBar.success(message: 'Order created successfully.');
   }
 
   Future<List<_OrderTableRow>> _loadOrders() async {
@@ -286,20 +260,14 @@ if (draftId != null) {
     required String targetStatus,
   }) async {
     if (order.status == targetStatus) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order is already $targetStatus.')),
-      );
+      AppSnackBar.warning(message: 'Order is already $targetStatus.');
       return;
     }
 
     final idOrCode = order.docId ?? order.orderId;
     final updated = await _updateOrderStatus(idOrCode, targetStatus);
     if (!updated) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Unable to update status in backend API.'),
-        ),
-      );
+      AppSnackBar.failed(message: 'Unable to update status in backend API.');
       return;
     }
 
@@ -342,14 +310,8 @@ if (draftId != null) {
 
   Future<void> _exportInvoiceReceipt(_OrderTableRow order) async {
     final items = order.productsForDialog;
-    final totalQty = items.fold<double>(
-      0,
-      (sum, item) => sum + item.quantity,
-    );
-    final subTotal = items.fold<double>(
-      0,
-      (sum, item) => sum + item.lineTotal,
-    );
+    final totalQty = items.fold<double>(0, (sum, item) => sum + item.quantity);
+    final subTotal = items.fold<double>(0, (sum, item) => sum + item.lineTotal);
     const taxRate = 18.0;
     final taxableValue = subTotal / (1 + (taxRate / 100));
     final taxAmount = subTotal - taxableValue;
@@ -387,7 +349,7 @@ if (draftId != null) {
                       ),
                       pw.SizedBox(height: 6),
                       pw.Text(
-                        'Sales ERP - Premium Receipt',
+                        'Warehouse - Premium Receipt',
                         style: pw.TextStyle(
                           fontSize: 10,
                           color: PdfColor.fromHex('#5A6F95'),
@@ -413,11 +375,15 @@ if (draftId != null) {
                         ),
                       ),
                       pw.SizedBox(height: 3),
-                      pw.Text('Order ID: ${order.orderId}',
-                          style: const pw.TextStyle(fontSize: 9.5)),
+                      pw.Text(
+                        'Order ID: ${order.orderId}',
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
                       pw.SizedBox(height: 3),
-                      pw.Text('Date: $invoiceDate',
-                          style: const pw.TextStyle(fontSize: 9.5)),
+                      pw.Text(
+                        'Date: $invoiceDate',
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
                     ],
                   ),
                 ),
@@ -454,10 +420,14 @@ if (draftId != null) {
                         ),
                       ),
                       pw.SizedBox(height: 2),
-                      pw.Text('Salesman: ${order.salesman}',
-                          style: const pw.TextStyle(fontSize: 9.5)),
-                      pw.Text('Status: ${order.status}',
-                          style: const pw.TextStyle(fontSize: 9.5)),
+                      pw.Text(
+                        'Salesman: ${order.salesman}',
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
+                      pw.Text(
+                        'Status: ${order.status}',
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
                     ],
                   ),
                 ),
@@ -481,12 +451,18 @@ if (draftId != null) {
                         ),
                       ),
                       pw.SizedBox(height: 4),
-                      pw.Text('Items: ${items.length}',
-                          style: const pw.TextStyle(fontSize: 9.5)),
-                      pw.Text('Quantity: ${totalQty.toStringAsFixed(2)}',
-                          style: const pw.TextStyle(fontSize: 9.5)),
-                      pw.Text('Order Date: ${order.dateText}',
-                          style: const pw.TextStyle(fontSize: 9.5)),
+                      pw.Text(
+                        'Items: ${items.length}',
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
+                      pw.Text(
+                        'Quantity: ${totalQty.toStringAsFixed(2)}',
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
+                      pw.Text(
+                        'Order Date: ${order.dateText}',
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
                     ],
                   ),
                 ),
@@ -647,8 +623,8 @@ if (draftId != null) {
     } catch (error, stackTrace) {
       debugPrint('Could not build invoice preview: $error\n$stackTrace');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not prepare invoice preview: $error')),
+        AppSnackBar.failed(
+          message: 'Could not prepare invoice preview: $error',
         );
       }
       return;
@@ -761,7 +737,10 @@ if (draftId != null) {
                     IconButton(
                       tooltip: 'Close preview',
                       onPressed: () => Navigator.of(previewContext).pop(),
-                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -801,7 +780,10 @@ if (draftId != null) {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   border: Border(top: BorderSide(color: Color(0xFFDCE5F3))),
@@ -854,8 +836,8 @@ if (draftId != null) {
                             );
                           } catch (error) {
                             if (!previewContext.mounted) return;
-                            ScaffoldMessenger.of(previewContext).showSnackBar(
-                              SnackBar(content: Text('Could not print invoice: $error')),
+                            AppSnackBar.failed(
+                              message: 'Could not print invoice: $error',
                             );
                           }
                         },
@@ -939,50 +921,48 @@ if (draftId != null) {
                         label: 'Create Order',
                         icon: Icons.add_shopping_cart_rounded,
                         primary: true,
-onPressed: () async {
-  final draftsJson = await _api.getDraftOrders();
+                        onPressed: () async {
+                          final draftsJson = await _api.getDraftOrders();
 
-  if (draftsJson.isEmpty) {
-    await _showCreateOrderDialog();
-    return;
-  }
+                          if (draftsJson.isEmpty) {
+                            await _showCreateOrderDialog();
+                            return;
+                          }
 
-  final drafts = draftsJson
-      .map((e) => _DraftOrder.fromJson(e))
-      .toList();
+                          final drafts = draftsJson
+                              .map((e) => _DraftOrder.fromJson(e))
+                              .toList();
 
-  final result = await showDialog(
-    context: context,
-    builder: (_) => _DraftOrdersDialog(
-      drafts: drafts,
-    ),
-  );
+                          final result = await showDialog(
+                            context: context,
+                            builder: (_) => _DraftOrdersDialog(drafts: drafts),
+                          );
 
-  if (result == null) return;
+                          if (result == null) return;
 
-  if (result == "new") {
-    await _showCreateOrderDialog();
-    return;
-  }
+                          if (result == "new") {
+                            await _showCreateOrderDialog();
+                            return;
+                          }
 
-  if (result is Map &&
-    result["action"] == "open") {
+                          if (result is Map && result["action"] == "open") {
+                            await _showCreateOrderDialog(draftId: result["id"]);
 
-  await _showCreateOrderDialog(
-    draftId: result["id"],
-  );
+                            return;
+                          }
+                          if (result is Map && result["action"] == "delete") {
+                            await _api.deleteDraft(result["id"]);
 
-  return;
-}
-  if (result is Map &&
-      result["action"] == "delete") {
+                            AppSnackBar.success(
+                              message: "Draft deleted successfully",
+                            );
 
-    print("Delete Draft : ${result["id"]}");
+                            setState(() {});
 
-    // Step 7
-    // We will delete from DB
-  }
-}                      ),
+                            return;
+                          }
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -1016,6 +996,7 @@ onPressed: () async {
                     Row(
                       children: [
                         PopupMenuButton<_OrdersDateFilter>(
+                          color: Colors.white,
                           tooltip: 'Date filter',
                           onSelected: (value) {
                             if (value == _OrdersDateFilter.custom) {
@@ -1029,7 +1010,7 @@ onPressed: () async {
                               }
                             });
                           },
-                          itemBuilder: (context) => const [
+                          itemBuilder: (context) => [
                             PopupMenuItem(
                               value: _OrdersDateFilter.all,
                               child: Text('All Dates'),
@@ -1145,10 +1126,9 @@ onPressed: () async {
     );
   }
 }
+
 class _DraftOrdersDialog extends StatelessWidget {
-  const _DraftOrdersDialog({
-    required this.drafts,
-  });
+  const _DraftOrdersDialog({required this.drafts});
 
   final List<_DraftOrder> drafts;
 
@@ -1157,19 +1137,14 @@ class _DraftOrdersDialog extends StatelessWidget {
     return Dialog(
       elevation: 0,
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(
-        horizontal: 220,
-        vertical: 90,
-      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 220, vertical: 90),
       child: Container(
         width: 620,
         height: 420,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: const Color(0xffE5E7EB),
-          ),
+          border: Border.all(color: const Color(0xffE5E7EB)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(.08),
@@ -1180,33 +1155,23 @@ class _DraftOrdersDialog extends StatelessWidget {
         ),
         child: Column(
           children: [
-
             //=================================================
             // HEADER
             //=================================================
-
             Container(
               height: 54,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: Color(0xffECEFF5),
-                  ),
-                ),
+                border: Border(bottom: BorderSide(color: Color(0xffECEFF5))),
               ),
               child: Row(
                 children: [
-
                   Container(
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
                       color: const Color(0xffEEF4FF),
-                      borderRadius:
-                          BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
                       Icons.description_outlined,
@@ -1229,37 +1194,23 @@ class _DraftOrdersDialog extends StatelessWidget {
 
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                      minimumSize:
-                          const Size(110, 34),
+                      minimumSize: const Size(110, 34),
                       elevation: 0,
-                      backgroundColor:
-                          const Color(0xff2563EB),
-                      padding:
-                          const EdgeInsets.symmetric(
-                        horizontal: 10,
-                      ),
-                      shape:
-                          RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(8),
+                      backgroundColor: const Color(0xff2563EB),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     onPressed: () {
-                      Navigator.pop(
-                        context,
-                        "new",
-                      );
+                      Navigator.pop(context, "new");
                     },
-                    icon: const Icon(
-                      Icons.add,
-                      size: 15,
-                    ),
+                    icon: const Icon(Icons.add, size: 15),
                     label: const Text(
                       "New",
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -1274,7 +1225,6 @@ class _DraftOrdersDialog extends StatelessWidget {
                     },
                     icon: const Icon(Icons.close),
                   ),
-
                 ],
               ),
             ),
@@ -1282,24 +1232,17 @@ class _DraftOrdersDialog extends StatelessWidget {
             //=================================================
             // SUMMARY BAR
             //=================================================
-
             Container(
               height: 42,
               margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: const Color(0xffF8FAFC),
-                borderRadius:
-                    BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color(0xffE5E7EB),
-                ),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xffE5E7EB)),
               ),
               child: Row(
                 children: [
-
                   const Icon(
                     Icons.inventory_2_outlined,
                     size: 16,
@@ -1320,12 +1263,8 @@ class _DraftOrdersDialog extends StatelessWidget {
 
                   Text(
                     "Continue Editing",
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 11,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
                   ),
-
                 ],
               ),
             ),
@@ -1333,206 +1272,182 @@ class _DraftOrdersDialog extends StatelessWidget {
             //=================================================
             // LIST
             //=================================================
-
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: drafts.length,
                 itemBuilder: (context, index) {
-
                   final draft = drafts[index];
 
                   // PART 2
 
-return _DraftCard(
-  child: Container(
-  height: 82,
-  margin: const EdgeInsets.only(bottom: 8),
-  padding: const EdgeInsets.symmetric(
-    horizontal: 12,
-    vertical: 8,
-  ),
-  decoration: BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(10),
-    border: Border.all(
-      color: const Color(0xffE5E7EB),
-    ),
-  ),
-  child: Row(
-    children: [
+                  return _DraftCard(
+                    child: Container(
+                      height: 82,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xffE5E7EB)),
+                      ),
+                      child: Row(
+                        children: [
+                          //--------------------------------------------------
+                          // ICON
+                          //--------------------------------------------------
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: const Color(0xffEEF4FF),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.receipt_long_outlined,
+                              color: Color(0xff2563EB),
+                              size: 18,
+                            ),
+                          ),
 
-      //--------------------------------------------------
-      // ICON
-      //--------------------------------------------------
+                          const SizedBox(width: 10),
 
-      Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: const Color(0xffEEF4FF),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Icon(
-          Icons.receipt_long_outlined,
-          color: Color(0xff2563EB),
-          size: 18,
-        ),
-      ),
+                          //--------------------------------------------------
+                          // DETAILS
+                          //--------------------------------------------------
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      draft.orderId,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
 
-      const SizedBox(width: 10),
+                                    const SizedBox(width: 8),
 
-      //--------------------------------------------------
-      // DETAILS
-      //--------------------------------------------------
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xffEEF7FF),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Text(
+                                        "Draft",
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          color: Color(0xff2563EB),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
 
-      Expanded(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+                                const SizedBox(height: 4),
 
-            Row(
-              children: [
+                                Text(
+                                  draft.customerName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
 
-                Text(
-                  draft.orderId,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                                const SizedBox(height: 3),
 
-                const SizedBox(width: 8),
+                                Text(
+                                  "${draft.quantity} Qty • ₹${draft.amount.toStringAsFixed(0)}",
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
 
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xffEEF7FF),
-                    borderRadius:
-                        BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    "Draft",
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: Color(0xff2563EB),
-                      fontWeight: FontWeight.w600,
+                          //--------------------------------------------------
+                          // DATE
+                          //--------------------------------------------------
+                          SizedBox(
+                            width: 72,
+                            child: Text(
+                              "${draft.createdAt.day}/${draft.createdAt.month}/${draft.createdAt.year}",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          //--------------------------------------------------
+                          // DELETE
+                          //--------------------------------------------------
+                          IconButton(
+                            splashRadius: 18,
+                            iconSize: 18,
+                            onPressed: () {
+                              Navigator.pop(context, {
+                                "action": "delete",
+                                "id": draft.id,
+                              });
+                            },
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.red,
+                            ),
+                          ),
+
+                          //--------------------------------------------------
+                          // OPEN
+                          //--------------------------------------------------
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(70, 32),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              backgroundColor: const Color(0xff2563EB),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onPressed: () {
+                              Navigator.pop(context, {
+                                "action": "open",
+                                "id": draft.id,
+                              });
+                            },
+                            child: const Text(
+                              "Open",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-
-              ],
-            ),
-
-            const SizedBox(height: 4),
-
-            Text(
-              draft.customerName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade700,
-              ),
-            ),
-
-            const SizedBox(height: 3),
-
-            Text(
-              "${draft.quantity} Qty • ₹${draft.amount.toStringAsFixed(0)}",
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey.shade600,
-              ),
-            ),
-
-          ],
-        ),
-      ),
-
-      //--------------------------------------------------
-      // DATE
-      //--------------------------------------------------
-
-      SizedBox(
-        width: 72,
-        child: Text(
-          "${draft.createdAt.day}/${draft.createdAt.month}/${draft.createdAt.year}",
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey.shade600,
-          ),
-        ),
-      ),
-
-      const SizedBox(width: 8),
-
-      //--------------------------------------------------
-      // DELETE
-      //--------------------------------------------------
-
-      IconButton(
-        splashRadius: 18,
-        iconSize: 18,
-        onPressed: () {
-          Navigator.pop(
-            context,
-            {
-              "action": "delete",
-              "id": draft.id,
-            },
-          );
-        },
-        icon: const Icon(
-          Icons.delete_outline,
-          color: Colors.red,
-        ),
-      ),
-
-      //--------------------------------------------------
-      // OPEN
-      //--------------------------------------------------
-
-      FilledButton(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(70, 32),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-          ),
-          backgroundColor: const Color(0xff2563EB),
-          shape: RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(8),
-          ),
-        ),
-        onPressed: () {
-          Navigator.pop(
-            context,
-            {
-              "action": "open",
-              "id": draft.id,
-            },
-          );
-        },
-        child: const Text(
-          "Open",
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-
-    ],
-  ),)
-);
+                  );
                 },
               ),
             ),
@@ -1540,72 +1455,48 @@ return _DraftCard(
             //=================================================
             // FOOTER
             //=================================================
-
             Container(
               height: 46,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: const BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: Color(0xffECEFF5),
-                  ),
-                ),
+                border: Border(top: BorderSide(color: Color(0xffECEFF5))),
               ),
               child: Row(
                 children: [
-
                   Text(
                     "${drafts.length} Saved Draft${drafts.length == 1 ? "" : "s"}",
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
 
                   const Spacer(),
 
                   OutlinedButton(
                     style: OutlinedButton.styleFrom(
-                      minimumSize:
-                          const Size(74, 32),
-                      padding:
-                          const EdgeInsets.symmetric(
-                        horizontal: 14,
-                      ),
+                      minimumSize: const Size(74, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
                     ),
                     onPressed: () {
                       Navigator.pop(context);
                     },
-                    child: const Text(
-                      "Close",
-                      style: TextStyle(
-                        fontSize: 12,
-                      ),
-                    ),
+                    child: const Text("Close", style: TextStyle(fontSize: 12)),
                   ),
-
                 ],
               ),
             ),
-
           ],
         ),
       ),
     );
   }
 }
+
 class _DraftCard extends StatefulWidget {
-  const _DraftCard({
-    required this.child,
-  });
+  const _DraftCard({required this.child});
 
   final Widget child;
 
   @override
-  State<_DraftCard> createState() =>
-      _DraftCardState();
+  State<_DraftCard> createState() => _DraftCardState();
 }
 
 class _DraftCardState extends State<_DraftCard> {
@@ -1624,28 +1515,19 @@ class _DraftCardState extends State<_DraftCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
 
-        transform: Matrix4.identity()
-          ..translate(
-            0.0,
-            hover ? -2.0 : 0.0,
-          ),
+        transform: Matrix4.identity()..translate(0.0, hover ? -2.0 : 0.0),
 
         decoration: BoxDecoration(
-          borderRadius:
-              BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(10),
 
           boxShadow: [
-
             BoxShadow(
-              color: hover
-                  ? Colors.blue.withOpacity(.08)
-                  : Colors.transparent,
+              color: hover ? Colors.blue.withOpacity(.08) : Colors.transparent,
 
               blurRadius: 12,
 
               offset: const Offset(0, 4),
             ),
-
           ],
         ),
 
@@ -1654,21 +1536,17 @@ class _DraftCardState extends State<_DraftCard> {
     );
   }
 }
+
 class _HoverDraftCard extends StatefulWidget {
-  const _HoverDraftCard({
-    required this.child,
-  });
+  const _HoverDraftCard({required this.child});
 
   final Widget child;
 
   @override
-  State<_HoverDraftCard> createState() =>
-      _HoverDraftCardState();
+  State<_HoverDraftCard> createState() => _HoverDraftCardState();
 }
 
-class _HoverDraftCardState
-    extends State<_HoverDraftCard> {
-
+class _HoverDraftCardState extends State<_HoverDraftCard> {
   bool hovering = false;
 
   @override
@@ -1687,18 +1565,12 @@ class _HoverDraftCardState
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
 
-        transform: Matrix4.identity()
-          ..translate(
-            0.0,
-            hovering ? -5.0 : 0.0,
-          ),
+        transform: Matrix4.identity()..translate(0.0, hovering ? -5.0 : 0.0),
 
         decoration: BoxDecoration(
-          borderRadius:
-              BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(24),
 
           boxShadow: [
-
             BoxShadow(
               color: hovering
                   ? Colors.blue.withOpacity(.14)
@@ -1706,12 +1578,8 @@ class _HoverDraftCardState
 
               blurRadius: hovering ? 35 : 18,
 
-              offset: Offset(
-                0,
-                hovering ? 18 : 8,
-              ),
+              offset: Offset(0, hovering ? 18 : 8),
             ),
-
           ],
         ),
 
@@ -1720,12 +1588,13 @@ class _HoverDraftCardState
     );
   }
 }
-class _DraftChip extends StatelessWidget {
 
+// ignore: unused_element
+class _DraftChip extends StatelessWidget {
   const _DraftChip({
     required this.icon,
     required this.text,
-    this.color = const Color(0xffF5F7FC),
+    required this.color,
   });
 
   final IconData icon;
@@ -1734,45 +1603,32 @@ class _DraftChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 9,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
 
       decoration: BoxDecoration(
         color: color,
-        borderRadius:
-            BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(30),
       ),
 
       child: Row(
         mainAxisSize: MainAxisSize.min,
 
         children: [
-
-          Icon(
-            icon,
-            size: 16,
-            color: Colors.blueGrey,
-          ),
+          Icon(icon, size: 16, color: Colors.blueGrey),
 
           const SizedBox(width: 7),
 
           Text(
             text,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
           ),
-
         ],
       ),
     );
   }
 }
+
 class DraftChoiceDialog extends StatelessWidget {
   const DraftChoiceDialog({super.key});
 
@@ -1801,6 +1657,7 @@ class DraftChoiceDialog extends StatelessWidget {
     );
   }
 }
+
 class _OrderTableRow {
   const _OrderTableRow({
     required this.docId,
@@ -1866,7 +1723,7 @@ class _OrderTableRow {
           sku: (p['sku'] ?? p['code'] ?? 'SKU-${index + 1}').toString(),
           quantity: qty,
           unitPrice: price,
-          
+
           lineTotal: total,
         );
       });
@@ -2042,15 +1899,31 @@ class _CustomerProfile {
   factory _CustomerProfile.fromMap(Map<String, dynamic> data) {
     return _CustomerProfile(
       id: (data['id'] ?? '').toString(),
+
       companyName:
-          (data['companyName'] ?? data['shopName'] ?? data['name'] ?? '')
+          (data['company_name'] ??
+                  data['companyName'] ??
+                  data['shopName'] ??
+                  data['name'] ??
+                  '')
               .toString(),
-      ownerName: (data['ownerName'] ?? '').toString(),
+
+      ownerName: (data['contact_person'] ?? data['ownerName'] ?? '').toString(),
+
       mobile: (data['mobile'] ?? '').toString(),
+
       email: (data['email'] ?? '').toString(),
+
       gstin: (data['gstin'] ?? '').toString(),
-      region: (data['region'] ?? '').toString(),
-      address: (data['address'] ?? '').toString(),
+
+      region: (data['state'] ?? data['region'] ?? '').toString(),
+
+      address: [
+        data['address_line1'],
+        data['address_line2'],
+        data['city'],
+        data['state'],
+      ].where((e) => e != null && e.toString().isNotEmpty).join(', '),
     );
   }
 }
@@ -2101,6 +1974,7 @@ class _CreateOrderItem {
 
   double get lineTotal => qty * rate;
 }
+
 class _DraftOrder {
   const _DraftOrder({
     required this.id,
@@ -2132,6 +2006,7 @@ class _DraftOrder {
     );
   }
 }
+
 class _CreateOrderDraft {
   const _CreateOrderDraft({
     required this.customer,
@@ -2139,24 +2014,25 @@ class _CreateOrderDraft {
     required this.notes,
     required this.items,
     required this.isDraft,
-
   });
 
   final _CustomerProfile customer;
   final String salesmanName;
   final String notes;
   final List<_CreateOrderItem> items;
-    final bool isDraft;
-
+  final bool isDraft;
 }
 
 class _CreateOrderDialog extends StatefulWidget {
-  const _CreateOrderDialog({required this.customers, required this.catalog,this.draftData,});
+  const _CreateOrderDialog({
+    required this.customers,
+    required this.catalog,
+    this.draftData,
+  });
 
   final List<_CustomerProfile> customers;
   final List<_CatalogItem> catalog;
-    final Map<String, dynamic>? draftData;
-
+  final Map<String, dynamic>? draftData;
 
   @override
   State<_CreateOrderDialog> createState() => _CreateOrderDialogState();
@@ -2193,31 +2069,28 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
   String? _salesRegion;
   String paymentMethod = 'Credit';
   String paymentStatus = 'Pending';
-final List<String> paymentStatusList = [
-  'Pending',
-  'Partial',
-  'Paid',
-];
-DateTime? dueDate;
-final _transportNameController = TextEditingController();
-final _transportPhoneController = TextEditingController();
-final _invoiceNumberController = TextEditingController();
-final _lrNumberController = TextEditingController();
+  final List<String> paymentStatusList = ['Pending', 'Partial', 'Paid'];
+  DateTime? dueDate;
+  final _transportNameController = TextEditingController();
+  final _transportPhoneController = TextEditingController();
+  final _invoiceNumberController = TextEditingController();
+  final _lrNumberController = TextEditingController();
+  final CategoryService _categoryService = CategoryService();
 
-DateTime? dispatchDate;
-DateTime? expectedDeliveryDate;
+  DateTime? dispatchDate;
+  DateTime? expectedDeliveryDate;
 
-final advanceController = TextEditingController();
+  final advanceController = TextEditingController();
 
-final creditDaysController = TextEditingController();
+  final creditDaysController = TextEditingController();
 
-final referenceController = TextEditingController();
+  final referenceController = TextEditingController();
 
-final remarksController = TextEditingController();
+  final remarksController = TextEditingController();
 
-final bankController = TextEditingController();
+  final bankController = TextEditingController();
 
-final transactionController = TextEditingController();
+  final transactionController = TextEditingController();
   bool _saveAsDraft = false;
   _CreateOrderStep _activeStep = _CreateOrderStep.orderDetails;
   final ScrollController _contentScrollController = ScrollController();
@@ -2243,63 +2116,59 @@ final transactionController = TextEditingController();
   ];
   final List<String> _priorities = const ['Low', 'Normal', 'High'];
   final List<String> paymentMethodList = [
-  'Cash',
-  'UPI',
-  'Credit',
-  'Bank Transfer',
-  'Cheque',
-];
-void _loadDraft(Map<String, dynamic> draft) {
-  debugPrint("LOAD DRAFT");
-  debugPrint(draft.toString());
+    'Cash',
+    'UPI',
+    'Credit',
+    'Bank Transfer',
+    'Cheque',
+  ];
+  void _loadDraft(Map<String, dynamic> draft) {
+    debugPrint("LOAD DRAFT");
+    debugPrint(draft.toString());
 
-  setState(() {
+    setState(() {
+      // Customer
+      debugPrint("Draft shopId: ${draft["shopId"]}");
 
-    // Customer
-    _selectedCustomer = widget.customers.firstWhere(
-      (c) => c.id == draft["shopId"],
-      orElse: () => widget.customers.first,
-    );
-
-    _shippingAddressController.text =
-        _selectedCustomer?.address ?? "";
-
-    // Salesman
-    _salesmanController.text =
-        draft["salesmanName"] ?? "";
-
-    // Notes
-    _notesController.text =
-        draft["notes"] ?? "";
-
-    // Draft checkbox
-    _saveAsDraft =
-        draft["isDraft"] ?? false;
-
-    // Clear previous items
-    _items.clear();
-
-    // Products
-    final products =
-        List<Map<String, dynamic>>.from(
-      draft["products"] ?? [],
-    );
-
-    for (final p in products) {
-
-      _items.add(
-        _CreateOrderItem(
-          category: p["category"] ?? "",
-          itemName: p["name"] ?? "",
-          sku: p["sku"] ?? "",
-          qty: (p["quantity"] as num).toDouble(),
-          rate: (p["unitPrice"] as num).toDouble(),
-        ),
+      for (final c in widget.customers) {
+        debugPrint("Customer id: ${c.id}  Name: ${c.companyName}");
+      }
+      _selectedCustomer = widget.customers.firstWhere(
+        (c) => c.id == draft["shopId"],
+        orElse: () => widget.customers.first,
       );
-    }
 
-  });
-}
+      _shippingAddressController.text = _selectedCustomer?.address ?? "";
+
+      // Salesman
+      _salesmanController.text = draft["salesmanName"] ?? "";
+
+      // Notes
+      _notesController.text = draft["notes"] ?? "";
+
+      // Draft checkbox
+      _saveAsDraft = draft["isDraft"] ?? false;
+
+      // Clear previous items
+      _items.clear();
+
+      // Products
+      final products = List<Map<String, dynamic>>.from(draft["products"] ?? []);
+
+      for (final p in products) {
+        _items.add(
+          _CreateOrderItem(
+            category: p["category"] ?? "",
+            itemName: p["name"] ?? "",
+            sku: p["sku"] ?? "",
+            qty: (p["quantity"] as num).toDouble(),
+            rate: (p["unitPrice"] as num).toDouble(),
+          ),
+        );
+      }
+    });
+  }
+
   void _recalcPricing() {
     if (!mounted) return;
     setState(() {});
@@ -2318,9 +2187,11 @@ void _loadDraft(Map<String, dynamic> draft) {
     _discountController.addListener(_recalcPricing);
     _freightController.addListener(_recalcPricing);
     _otherChargesController.addListener(_recalcPricing);
-if (widget.draftData != null) {
-  _loadDraft(widget.draftData!);
-}  }
+    if (widget.draftData != null) {
+      _loadDraft(widget.draftData!);
+    }
+    loadCategories();
+  }
 
   @override
   void dispose() {
@@ -2350,15 +2221,15 @@ if (widget.draftData != null) {
     _contentScrollController.dispose();
     _transportNameController.dispose();
     advanceController.dispose();
-creditDaysController.dispose();
-referenceController.dispose();
-remarksController.dispose();
-bankController.dispose();
-transactionController.dispose();
-_transportPhoneController.dispose();
-_invoiceNumberController.dispose();
-_deliveryInstructionController.dispose();
-_lrNumberController.dispose();
+    creditDaysController.dispose();
+    referenceController.dispose();
+    remarksController.dispose();
+    bankController.dispose();
+    transactionController.dispose();
+    _transportPhoneController.dispose();
+    _invoiceNumberController.dispose();
+    _deliveryInstructionController.dispose();
+    _lrNumberController.dispose();
     super.dispose();
   }
 
@@ -2398,9 +2269,21 @@ _lrNumberController.dispose();
     );
   }
 
-  List<String> get _categories {
-    final set = widget.catalog.map((e) => e.category).toSet().toList()..sort();
-    return set;
+  List<String> _categories = [];
+
+  Future<void> loadCategories() async {
+    try {
+      final data = await _categoryService.getCategories();
+
+      print("Category Count: ${data.length}");
+      print(data);
+
+      setState(() {
+        _categories = data.map((e) => e.name).toList();
+      });
+    } catch (e) {
+      print(e);
+    }
   }
 
   List<_CatalogItem> get _itemsForCategory {
@@ -2411,17 +2294,13 @@ _lrNumberController.dispose();
 
   void _addItem() {
     if (_selectedCategory == null || _selectedItem == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Choose category and item first.')),
-      );
+      AppSnackBar.warning(message: 'Choose category and item first.');
       return;
     }
     final qty = _asNum(_qtyController.text.trim());
     final rate = _asNum(_rateController.text.trim());
     if (qty <= 0 || rate < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter valid qty and rate.')),
-      );
+      AppSnackBar.warning(message: 'Enter valid qty and rate.');
       return;
     }
     setState(() {
@@ -2449,11 +2328,10 @@ _lrNumberController.dispose();
     final value = _grandTotal - discount + freight + other;
     return value < 0 ? 0 : value;
   }
- double get advanceAmount =>
-    double.tryParse(advanceController.text) ?? 0;
 
-double get balanceAmount =>
-    _netTotal - advanceAmount;
+  double get advanceAmount => double.tryParse(advanceController.text) ?? 0;
+
+  double get balanceAmount => _netTotal - advanceAmount;
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -2626,10 +2504,11 @@ double get balanceAmount =>
                               children: [
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
+                                    isExpanded: true,
+                                    itemHeight: 56,
                                     value: _orderType,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Order Type *',
-                                      isDense: true,
+                                    decoration: premiumDecoration(
+                                      label: 'Order Type *',
                                     ),
                                     items: _orderTypes
                                         .map(
@@ -2647,104 +2526,10 @@ double get balanceAmount =>
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: TextFormField(
-                                    controller: _orderDateController,
-                                    readOnly: true,
-                                    decoration: InputDecoration(
-                                      labelText: 'Order Date *',
-                                      isDense: true,
-                                      suffixIcon: IconButton(
-                                        onPressed: () => _pickOrderDate(
-                                          _orderDateController,
-                                        ),
-                                        icon: const Icon(
-                                          Icons.calendar_month_rounded,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _orderIdController,
-                                    readOnly: true,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Order ID',
-                                      hintText: 'Auto Generate',
-                                      isDense: true,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _referenceController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Reference No. (Optional)',
-                                      isDense: true,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _poNumberController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'PO Number (Optional)',
-                                      isDense: true,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _poDateController,
-                                    readOnly: true,
-                                    decoration: InputDecoration(
-                                      labelText: 'PO Date (Optional)',
-                                      isDense: true,
-                                      suffixIcon: IconButton(
-                                        onPressed: () =>
-                                            _pickOrderDate(_poDateController),
-                                        icon: const Icon(
-                                          Icons.calendar_month_rounded,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: _salesmanController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Salesman *',
-                                      isDense: true,
-                                    ),
-                                    validator: (value) =>
-                                        (value ?? '').trim().isEmpty
-                                        ? 'Required'
-                                        : null,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
                                   child: DropdownButtonFormField<String>(
                                     value: _salesRegion,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Sales Region',
-                                      isDense: true,
+                                    decoration: premiumDecoration(
+                                      label: 'Sales Region',
                                     ),
                                     items: _regions
                                         .map(
@@ -2759,13 +2544,13 @@ double get balanceAmount =>
                                     },
                                   ),
                                 ),
+                                //
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
                                     value: _priority,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Priority',
-                                      isDense: true,
+                                    decoration: premiumDecoration(
+                                      label: 'Priority',
                                     ),
                                     items: _priorities
                                         .map(
@@ -2781,6 +2566,97 @@ double get balanceAmount =>
                                     },
                                   ),
                                 ),
+                                const SizedBox(width: 8),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _orderIdController,
+                                    readOnly: true,
+                                    decoration: premiumDecoration(
+                                      label: 'Order ID',
+                                      hint: 'Auto Generate',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _orderDateController,
+                                    readOnly: true,
+                                    decoration: premiumDecoration(
+                                      label: 'Order Date *',
+                                      suffixIcon: IconButton(
+                                        onPressed: () => _pickOrderDate(
+                                          _orderDateController,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.calendar_month_rounded,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _poDateController,
+                                    readOnly: true,
+                                    decoration: premiumDecoration(
+                                      label: 'PO Date (Optional)',
+                                      suffixIcon: IconButton(
+                                        onPressed: () =>
+                                            _pickOrderDate(_poDateController),
+                                        icon: const Icon(
+                                          Icons.calendar_month_rounded,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _salesmanController,
+                                    decoration: premiumDecoration(
+                                      label: 'Salesman *',
+                                    ),
+                                    validator: (value) =>
+                                        (value ?? '').trim().isEmpty
+                                        ? 'Required'
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _referenceController,
+                                    decoration: premiumDecoration(
+                                      label: 'Reference No. (Optional)',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: _poNumberController,
+                                    decoration: premiumDecoration(
+                                      label: 'PO Number (Optional)',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -2793,16 +2669,31 @@ double get balanceAmount =>
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
+
                             const SizedBox(height: 8),
+                            Builder(
+                              builder: (context) {
+                                print(
+                                  "Widget Customer Length: ${widget.customers.length}",
+                                );
+
+                                for (final c in widget.customers) {
+                                  print(
+                                    "Customer => ${c.id} | ${c.companyName}",
+                                  );
+                                }
+
+                                return const SizedBox.shrink();
+                              },
+                            ),
                             Row(
                               children: [
                                 Expanded(
                                   child:
                                       DropdownButtonFormField<_CustomerProfile>(
                                         value: _selectedCustomer,
-                                        decoration: const InputDecoration(
-                                          labelText: 'Customer *',
-                                          isDense: true,
+                                        decoration: premiumDecoration(
+                                          label: 'Customer *',
                                         ),
                                         items: widget.customers
                                             .map(
@@ -2830,10 +2721,9 @@ double get balanceAmount =>
                                 Expanded(
                                   child: TextFormField(
                                     controller: _shopBranchController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Shop / Branch',
+                                    decoration: premiumDecoration(
+                                      label: 'Shop / Branch',
                                       hintText: 'Select shop / branch',
-                                      isDense: true,
                                     ),
                                   ),
                                 ),
@@ -2845,8 +2735,8 @@ double get balanceAmount =>
                                 Expanded(
                                   child: TextFormField(
                                     readOnly: true,
-                                    decoration: InputDecoration(
-                                      labelText: 'Billing Address',
+                                    decoration: premiumDecoration(
+                                      label: 'Billing Address',
                                       hintText:
                                           _selectedCustomer
                                                   ?.address
@@ -2854,7 +2744,6 @@ double get balanceAmount =>
                                               true
                                           ? _selectedCustomer!.address
                                           : 'Select customer to load address',
-                                      isDense: true,
                                     ),
                                   ),
                                 ),
@@ -2862,9 +2751,8 @@ double get balanceAmount =>
                                 Expanded(
                                   child: TextFormField(
                                     controller: _shippingAddressController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Shipping Address',
-                                      isDense: true,
+                                    decoration: premiumDecoration(
+                                      label: 'Shipping Address',
                                     ),
                                   ),
                                 ),
@@ -2933,9 +2821,8 @@ double get balanceAmount =>
                                         child: TextFormField(
                                           controller: _discountController,
                                           keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Discount',
-                                            isDense: true,
+                                          decoration: premiumDecoration(
+                                            label: 'Discount',
                                           ),
                                         ),
                                       ),
@@ -2944,9 +2831,8 @@ double get balanceAmount =>
                                         child: TextFormField(
                                           controller: _freightController,
                                           keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Freight',
-                                            isDense: true,
+                                          decoration: premiumDecoration(
+                                            label: 'Freight',
                                           ),
                                         ),
                                       ),
@@ -2955,9 +2841,8 @@ double get balanceAmount =>
                                         child: TextFormField(
                                           controller: _otherChargesController,
                                           keyboardType: TextInputType.number,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Other Charges',
-                                            isDense: true,
+                                          decoration: premiumDecoration(
+                                            label: 'Other Charges',
                                           ),
                                         ),
                                       ),
@@ -2998,45 +2883,43 @@ double get balanceAmount =>
                               ),
                             ),
                             const SizedBox(height: 8),
-                          KeyedSubtree(
-  key: _stepKeys[_CreateOrderStep.payment],
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
+                            KeyedSubtree(
+                              key: _stepKeys[_CreateOrderStep.payment],
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Payment Information',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
 
-      Text(
-        'Payment Information',
-        style: Theme.of(context)
-            .textTheme
-            .titleMedium
-            ?.copyWith(fontWeight: FontWeight.w800),
-      ),
+                                  const SizedBox(height: 15),
 
-      const SizedBox(height: 15),
-
-      paymentSection(),
-
-    ],
-  ),
-),
+                                  paymentSection(),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 8),
-                          KeyedSubtree(
-  key: _stepKeys[_CreateOrderStep.delivery],
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'Delivery & Dispatch',
-        style: Theme.of(context)
-            .textTheme
-            .titleMedium
-            ?.copyWith(fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 12),
-      deliverySection(),
-    ],
-  ),
-),
+                            KeyedSubtree(
+                              key: _stepKeys[_CreateOrderStep.delivery],
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Delivery & Dispatch',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  deliverySection(),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             KeyedSubtree(
                               key: _stepKeys[_CreateOrderStep.attachments],
@@ -3172,12 +3055,9 @@ double get balanceAmount =>
                       onPressed: () {
                         if (!_formKey.currentState!.validate()) {
                           _selectStep(_CreateOrderStep.orderDetails);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
+                          AppSnackBar.warning(
+                            message:
                                 'Fill required fields in Order Details first.',
-                              ),
-                            ),
                           );
                           return;
                         }
@@ -3187,23 +3067,20 @@ double get balanceAmount =>
                                 ? _CreateOrderStep.customerShop
                                 : _CreateOrderStep.items,
                           );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
+                          AppSnackBar.warning(
+                            message:
                                 'Select customer and add at least one item.',
-                              ),
-                            ),
                           );
                           return;
                         }
                         Navigator.of(context).pop(
-                       _CreateOrderDraft(
-  customer: _selectedCustomer!,
-  salesmanName: _salesmanController.text.trim(),
-  notes: _notesController.text.trim(),
-  items: List<_CreateOrderItem>.from(_items),
-  isDraft: _saveAsDraft,
-),
+                          _CreateOrderDraft(
+                            customer: _selectedCustomer!,
+                            salesmanName: _salesmanController.text.trim(),
+                            notes: _notesController.text.trim(),
+                            items: List<_CreateOrderItem>.from(_items),
+                            isDraft: _saveAsDraft,
+                          ),
                         );
                       },
                       icon: const Icon(Icons.save_rounded, size: 16),
@@ -3218,462 +3095,428 @@ double get balanceAmount =>
       ),
     );
   }
- Widget paymentSection() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              value: paymentStatus,
-              decoration: const InputDecoration(
-                labelText: "Payment Status",
-                isDense: true,
-              ),
-              items: paymentStatusList
-                  .map(
-                    (e) => DropdownMenuItem(
-                      value: e,
-                      child: Text(e),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() => paymentStatus = v);
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              value: paymentMethod,
-              decoration: const InputDecoration(
-                labelText: "Payment Method",
-                isDense: true,
-              ),
-              items: paymentMethodList
-                  .map(
-                    (e) => DropdownMenuItem(
-                      value: e,
-                      child: Text(e),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() => paymentMethod = v);
-              },
-            ),
-          ),
-        ],
-      ),
 
-      const SizedBox(height: 10),
-
-      Row(
-        children: [
-          Expanded(
-            child: TextFormField(
-              controller: advanceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: "Advance Amount",
-                prefixText: "₹ ",
-                isDense: true,
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextFormField(
-              controller: _referenceController,
-              decoration: const InputDecoration(
-                labelText: "Reference Number",
-                isDense: true,
-              ),
-            ),
-          ),
-        ],
-      ),
-
-      if (paymentMethod == "Credit") ...[
-        const SizedBox(height: 10),
+  Widget paymentSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Row(
           children: [
             Expanded(
-              child: TextFormField(
-                controller: creditDaysController,
-                keyboardType: TextInputType.number,
+              child: DropdownButtonFormField<String>(
+                value: paymentStatus,
                 decoration: const InputDecoration(
-                  labelText: "Credit Days",
+                  labelText: "Payment Status",
                   isDense: true,
                 ),
+                items: paymentStatusList
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => paymentStatus = v);
+                },
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
+              child: DropdownButtonFormField<String>(
+                value: paymentMethod,
+                decoration: const InputDecoration(
+                  labelText: "Payment Method",
+                  isDense: true,
                 ),
-                icon: const Icon(Icons.calendar_today, size: 18),
-                label: Text(
-                  dueDate == null
-                      ? "Select Due Date"
-                      : "${dueDate!.day}/${dueDate!.month}/${dueDate!.year}",
+                items: paymentMethodList
+                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => paymentMethod = v);
+                },
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: advanceController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Advance Amount",
+                  prefixText: "₹ ",
+                  isDense: true,
                 ),
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: dueDate ?? DateTime.now(),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime(2100),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: _referenceController,
+                decoration: const InputDecoration(
+                  labelText: "Reference Number",
+                  isDense: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        if (paymentMethod == "Credit") ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: creditDaysController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: "Credit Days",
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  icon: const Icon(Icons.calendar_today, size: 18),
+                  label: Text(
+                    dueDate == null
+                        ? "Select Due Date"
+                        : "${dueDate!.day}/${dueDate!.month}/${dueDate!.year}",
+                  ),
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: dueDate ?? DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
+                    );
+
+                    if (picked != null) {
+                      setState(() => dueDate = picked);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+
+        if (paymentMethod == "Bank Transfer" || paymentMethod == "Cheque") ...[
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: bankController,
+            decoration: const InputDecoration(
+              labelText: "Bank Name",
+              isDense: true,
+            ),
+          ),
+        ],
+
+        if (paymentMethod == "UPI" || paymentMethod == "Bank Transfer") ...[
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: transactionController,
+            decoration: const InputDecoration(
+              labelText: "Transaction ID",
+              isDense: true,
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 10),
+
+        TextFormField(
+          controller: remarksController,
+          maxLines: 2,
+          decoration: const InputDecoration(
+            labelText: "Remarks",
+            isDense: true,
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FBFF),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              summaryRow("Order Total", "₹ ${_netTotal.toStringAsFixed(2)}"),
+              const Divider(height: 18),
+              summaryRow("Advance", "₹ ${advanceAmount.toStringAsFixed(2)}"),
+              const Divider(height: 18),
+              summaryRow("Balance", "₹ ${balanceAmount.toStringAsFixed(2)}"),
+              const Divider(height: 18),
+              summaryRow("Payment Status", paymentStatus),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<DateTime?> _showPremiumDatePicker(DateTime? selectedDate) async {
+    return await showDatePicker(
+      context: context,
+      initialDate: selectedDate ?? DateTime.now(),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xff2563EB),
+              onPrimary: Colors.white,
+              surface: Colors.white,
+            ),
+            dialogTheme: DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(0),
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+
+  Widget deliverySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _transportNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Transport Company *',
+                  isDense: true,
+                  prefixIcon: Icon(Icons.local_shipping_outlined),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            Expanded(
+              child: TextFormField(
+                controller: _transportPhoneController,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Transport Contact No.',
+                  isDense: true,
+                  prefixIcon: Icon(Icons.phone_outlined),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _invoiceNumberController,
+                decoration: const InputDecoration(
+                  labelText: 'Invoice Number',
+                  isDense: true,
+                  prefixIcon: Icon(Icons.receipt_long_outlined),
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            Expanded(
+              child: TextFormField(
+                controller: _lrNumberController,
+                decoration: const InputDecoration(
+                  labelText: 'LR / Consignment No.',
+                  isDense: true,
+                  prefixIcon: Icon(Icons.confirmation_number_outlined),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: buildDateField(
+                label: "Dispatch Date",
+                value: dispatchDate,
+                onTap: () async {
+                  final picked = await _showPremiumDatePicker(
+                    expectedDeliveryDate,
                   );
 
                   if (picked != null) {
-                    setState(() => dueDate = picked);
+                    setState(() => dispatchDate = picked);
+                  }
+                },
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            Expanded(
+              child: buildDateField(
+                label: "Expected Delivery",
+                value: expectedDeliveryDate,
+                onTap: () async {
+                  final picked = await _showPremiumDatePicker(
+                    expectedDeliveryDate,
+                  );
+
+                  if (picked != null) {
+                    setState(() => expectedDeliveryDate = picked);
                   }
                 },
               ),
             ),
           ],
         ),
-      ],
+        const SizedBox(height: 12),
 
-      if (paymentMethod == "Bank Transfer" ||
-          paymentMethod == "Cheque") ...[
-        const SizedBox(height: 10),
         TextFormField(
-          controller: bankController,
+          controller: _deliveryInstructionController,
+          maxLines: 3,
           decoration: const InputDecoration(
-            labelText: "Bank Name",
+            labelText: 'Delivery Instructions',
             isDense: true,
+            prefixIcon: Icon(Icons.notes_outlined),
+            alignLabelWithHint: true,
+          ),
+        ),
+
+        const SizedBox(height: 18),
+
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xffF8FBFF),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            children: [
+              summaryRow(
+                "Transport",
+                _transportNameController.text.isEmpty
+                    ? "-"
+                    : _transportNameController.text,
+              ),
+
+              const Divider(),
+
+              summaryRow(
+                "Invoice",
+                _invoiceNumberController.text.isEmpty
+                    ? "-"
+                    : _invoiceNumberController.text,
+              ),
+
+              const Divider(),
+
+              summaryRow(
+                "Dispatch",
+                dispatchDate == null
+                    ? "-"
+                    : DateFormat('dd MMM yyyy').format(dispatchDate!),
+              ),
+
+              const Divider(),
+
+              summaryRow(
+                "Expected Delivery",
+                expectedDeliveryDate == null
+                    ? "-"
+                    : DateFormat('dd MMM yyyy').format(expectedDeliveryDate!),
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
 
-      if (paymentMethod == "UPI" ||
-          paymentMethod == "Bank Transfer") ...[
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: transactionController,
-          decoration: const InputDecoration(
-            labelText: "Transaction ID",
-            isDense: true,
-          ),
-        ),
-      ],
-
-      const SizedBox(height: 10),
-
-      TextFormField(
-        controller: remarksController,
-        maxLines: 2,
-        decoration: const InputDecoration(
-          labelText: "Remarks",
+  Widget buildDateField({
+    required String label,
+    required DateTime? value,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
           isDense: true,
-        ),
-      ),
-
-      const SizedBox(height: 12),
-
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FBFF),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Column(
-          children: [
-            summaryRow(
-              "Order Total",
-              "₹ ${_netTotal.toStringAsFixed(2)}",
-            ),
-            const Divider(height: 18),
-            summaryRow(
-              "Advance",
-              "₹ ${advanceAmount.toStringAsFixed(2)}",
-            ),
-            const Divider(height: 18),
-            summaryRow(
-              "Balance",
-              "₹ ${balanceAmount.toStringAsFixed(2)}",
-            ),
-            const Divider(height: 18),
-            summaryRow(
-              "Payment Status",
-              paymentStatus,
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
-}
-Future<DateTime?> _showPremiumDatePicker(DateTime? selectedDate) async {
-  return await showDatePicker(
-    context: context,
-    initialDate: selectedDate ?? DateTime.now(),
-    firstDate: DateTime(2024),
-    lastDate: DateTime(2100),
-    builder: (context, child) {
-      return Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: Color(0xff2563EB),
-            onPrimary: Colors.white,
-            surface: Colors.white,
-          ),
-         dialogTheme: DialogThemeData(
-  shape: RoundedRectangleBorder(
-    borderRadius: BorderRadius.circular(0),
-  ),
-),
-        ),
-        child: child!,
-      );
-    },
-  );
-}
-Widget deliverySection() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-
-      Row(
-        children: [
-
-          Expanded(
-            child: TextFormField(
-              controller: _transportNameController,
-              decoration: const InputDecoration(
-                labelText: 'Transport Company *',
-                isDense: true,
-                prefixIcon: Icon(Icons.local_shipping_outlined),
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 10),
-
-          Expanded(
-            child: TextFormField(
-              controller: _transportPhoneController,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Transport Contact No.',
-                isDense: true,
-                prefixIcon: Icon(Icons.phone_outlined),
-              ),
-            ),
-          ),
-
-        ],
-      ),
-
-      const SizedBox(height: 12),
-
-      Row(
-        children: [
-
-          Expanded(
-            child: TextFormField(
-              controller: _invoiceNumberController,
-              decoration: const InputDecoration(
-                labelText: 'Invoice Number',
-                isDense: true,
-                prefixIcon: Icon(Icons.receipt_long_outlined),
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 10),
-
-          Expanded(
-            child: TextFormField(
-              controller: _lrNumberController,
-              decoration: const InputDecoration(
-                labelText: 'LR / Consignment No.',
-                isDense: true,
-                prefixIcon: Icon(Icons.confirmation_number_outlined),
-              ),
-            ),
-          ),
-
-        ],
-      ),
-
-      const SizedBox(height: 12),
-Row(
-  children: [
-    Expanded(
-      child: buildDateField(
-        label: "Dispatch Date",
-        value: dispatchDate,
-        onTap: () async {
-final picked = await _showPremiumDatePicker(expectedDeliveryDate);
-
-          if (picked != null) {
-            setState(() => dispatchDate = picked);
-          }
-        },
-      ),
-    ),
-
-    const SizedBox(width: 10),
-
-    Expanded(
-      child: buildDateField(
-        label: "Expected Delivery",
-        value: expectedDeliveryDate,
-        onTap: () async {
-         final picked = await _showPremiumDatePicker(expectedDeliveryDate);
-
-          if (picked != null) {
-            setState(() => expectedDeliveryDate = picked);
-          }
-        },
-      ),
-    ),
-  ],
-),
-      const SizedBox(height: 12),
-
-      TextFormField(
-        controller: _deliveryInstructionController,
-        maxLines: 3,
-        decoration: const InputDecoration(
-          labelText: 'Delivery Instructions',
-          isDense: true,
-          prefixIcon: Icon(Icons.notes_outlined),
-          alignLabelWithHint: true,
-        ),
-      ),
-
-      const SizedBox(height: 18),
-
-      Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xffF8FBFF),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: AppColors.border,
+          prefixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+          suffixIcon: const Icon(Icons.arrow_drop_down, size: 20),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 14,
           ),
         ),
-        child: Column(
-          children: [
-
-            summaryRow(
-              "Transport",
-              _transportNameController.text.isEmpty
-                  ? "-"
-                  : _transportNameController.text,
-            ),
-
-            const Divider(),
-
-            summaryRow(
-              "Invoice",
-              _invoiceNumberController.text.isEmpty
-                  ? "-"
-                  : _invoiceNumberController.text,
-            ),
-
-            const Divider(),
-
-            summaryRow(
-              "Dispatch",
-              dispatchDate == null
-                  ? "-"
-                  : DateFormat('dd MMM yyyy')
-                      .format(dispatchDate!),
-            ),
-
-            const Divider(),
-
-            summaryRow(
-              "Expected Delivery",
-              expectedDeliveryDate == null
-                  ? "-"
-                  : DateFormat('dd MMM yyyy')
-                      .format(expectedDeliveryDate!),
-            ),
-
-          ],
-        ),
-      ),
-    ],
-  );
-}
-Widget buildDateField({
-  required String label,
-  required DateTime? value,
-  required VoidCallback onTap,
-}) {
-  return InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(10),
-    child: InputDecorator(
-      decoration: InputDecoration(
-        labelText: label,
-        isDense: true,
-        prefixIcon: const Icon(
-          Icons.calendar_today_outlined,
-          size: 18,
-        ),
-        suffixIcon: const Icon(
-          Icons.arrow_drop_down,
-          size: 20,
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 14,
-        ),
-      ),
-      child: Text(
-        value == null ? "Select Date" : _formatDate(value),
-        style: TextStyle(
-          fontSize: 13,
-          color: value == null
-              ? Colors.grey.shade600
-              : AppColors.text,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-    ),
-  );
-}
-Widget summaryRow(String title, String value) {
-  return Row(
-    children: [
-      Expanded(
         child: Text(
-          title,
+          value == null ? "Select Date" : _formatDate(value),
+          style: TextStyle(
+            fontSize: 13,
+            color: value == null ? Colors.grey.shade600 : AppColors.text,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget summaryRow(String title, String value) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Text(
+          value,
           style: const TextStyle(
             fontSize: 13,
-            color: AppColors.textMuted,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
+            color: AppColors.text,
           ),
         ),
-      ),
-      Text(
-        value,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.text,
-        ),
-      ),
-    ],
-  );
-}
+      ],
+    );
+  }
 }
 
 class _OrderStepMenuTile extends StatelessWidget {
@@ -4072,8 +3915,6 @@ class _ScrollableTableTextCell extends StatelessWidget {
   }
 }
 
-
-
 pw.Widget _pdfHeaderCell(String text) {
   return pw.Padding(
     padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -4178,7 +4019,7 @@ pw.Document _buildProfessionalInvoice({
                       ),
                     ),
                     pw.Text(
-                      'Sales ERP Pvt. Ltd.',
+                      'Warehouse Pvt. Ltd.',
                       style: pw.TextStyle(color: muted, fontSize: 8),
                     ),
                   ],
@@ -4240,7 +4081,7 @@ pw.Document _buildProfessionalInvoice({
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
-                      'SALES ERP',
+                      'Warehouse',
                       style: pw.TextStyle(
                         color: navy,
                         fontSize: 20,
@@ -4258,7 +4099,11 @@ pw.Document _buildProfessionalInvoice({
                     pw.SizedBox(height: 5),
                     pw.Text(
                       'Stock. Store. Deliver.\nChennai, Tamil Nadu, India  |  +91 98765 43210\naccounts@saleserp.in  |  www.saleserp.in',
-                      style: pw.TextStyle(color: muted, fontSize: 8.3, lineSpacing: 2),
+                      style: pw.TextStyle(
+                        color: muted,
+                        fontSize: 8.3,
+                        lineSpacing: 2,
+                      ),
                     ),
                   ],
                 ),
@@ -4298,7 +4143,11 @@ pw.Document _buildProfessionalInvoice({
                       ),
                     ),
                     pw.SizedBox(height: 8),
-                    _invoiceKeyValue('Invoice date', _invoiceDate(order.orderDate), muted),
+                    _invoiceKeyValue(
+                      'Invoice date',
+                      _invoiceDate(order.orderDate),
+                      muted,
+                    ),
                     _invoiceKeyValue('Due date', _invoiceDate(dueDate), muted),
                     _invoiceKeyValue('Order / PO no.', order.orderId, muted),
                   ],
@@ -4371,8 +4220,14 @@ pw.Document _buildProfessionalInvoice({
             pw.TableRow(
               decoration: pw.BoxDecoration(color: navy),
               children: [
-                '#', 'ITEM CODE', 'ITEM DESCRIPTION', 'UOM', 'QTY',
-                'UNIT PRICE', 'TAX', 'AMOUNT',
+                '#',
+                'ITEM CODE',
+                'ITEM DESCRIPTION',
+                'UOM',
+                'QTY',
+                'UNIT PRICE',
+                'TAX',
+                'AMOUNT',
               ].map(_professionalInvoiceHeaderCell).toList(),
             ),
             ...items.asMap().entries.map((entry) {
@@ -4381,23 +4236,27 @@ pw.Document _buildProfessionalInvoice({
                 decoration: pw.BoxDecoration(
                   color: entry.key.isEven ? PdfColors.white : paleBlue,
                 ),
-                children: [
-                  '${entry.key + 1}',
-                  item.sku.isEmpty ? '-' : item.sku,
-                  item.name,
-                  'PCS',
-                  item.quantity.toStringAsFixed(2),
-                  _invoiceMoney(item.unitPrice),
-                  '${taxRate.toStringAsFixed(0)}%',
-                  _invoiceMoney(item.lineTotal),
-                ].asMap().entries.map((cell) {
-                  final align = cell.key == 2
-                      ? pw.TextAlign.left
-                      : cell.key == 5 || cell.key == 7
-                      ? pw.TextAlign.right
-                      : pw.TextAlign.center;
-                  return _professionalInvoiceBodyCell(cell.value, align: align);
-                }).toList(),
+                children:
+                    [
+                      '${entry.key + 1}',
+                      item.sku.isEmpty ? '-' : item.sku,
+                      item.name,
+                      'PCS',
+                      item.quantity.toStringAsFixed(2),
+                      _invoiceMoney(item.unitPrice),
+                      '${taxRate.toStringAsFixed(0)}%',
+                      _invoiceMoney(item.lineTotal),
+                    ].asMap().entries.map((cell) {
+                      final align = cell.key == 2
+                          ? pw.TextAlign.left
+                          : cell.key == 5 || cell.key == 7
+                          ? pw.TextAlign.right
+                          : pw.TextAlign.center;
+                      return _professionalInvoiceBodyCell(
+                        cell.value,
+                        align: align,
+                      );
+                    }).toList(),
               );
             }),
           ],
@@ -4415,9 +4274,20 @@ pw.Document _buildProfessionalInvoice({
                     accent: navy,
                     border: border,
                     children: [
-                      _invoiceText(order.notes.isEmpty ? 'Goods once sold will not be taken back.' : order.notes, muted),
-                      _invoiceText('Please inspect goods at the time of delivery.', muted),
-                      _invoiceText('Payment is due within 15 days of invoice date.', muted),
+                      _invoiceText(
+                        order.notes.isEmpty
+                            ? 'Goods once sold will not be taken back.'
+                            : order.notes,
+                        muted,
+                      ),
+                      _invoiceText(
+                        'Please inspect goods at the time of delivery.',
+                        muted,
+                      ),
+                      _invoiceText(
+                        'Payment is due within 15 days of invoice date.',
+                        muted,
+                      ),
                     ],
                   ),
                   pw.SizedBox(height: 9),
@@ -4426,8 +4296,14 @@ pw.Document _buildProfessionalInvoice({
                     accent: blue,
                     border: border,
                     children: [
-                      _invoiceText('Bank: HDFC Bank  |  A/c Name: Sales ERP Pvt. Ltd.', muted),
-                      _invoiceText('Account no.: 50200012345678  |  IFSC: HDFC0001234', muted),
+                      _invoiceText(
+                        'Bank: HDFC Bank  |  A/c Name: Warehouse Pvt. Ltd.',
+                        muted,
+                      ),
+                      _invoiceText(
+                        'Account no.: 50200012345678  |  IFSC: HDFC0001234',
+                        muted,
+                      ),
                     ],
                   ),
                 ],
@@ -4445,25 +4321,64 @@ pw.Document _buildProfessionalInvoice({
                 ),
                 child: pw.Column(
                   children: [
-                    _professionalTotalRow('Sub total', _invoiceMoney(items.fold<double>(0, (sum, item) => sum + item.lineTotal)), muted),
-                    _professionalTotalRow('Taxable amount', _invoiceMoney(taxableValue), muted),
-                    _professionalTotalRow('CGST (9%)', _invoiceMoney(cgst), muted),
-                    _professionalTotalRow('SGST (9%)', _invoiceMoney(cgst), muted),
+                    _professionalTotalRow(
+                      'Sub total',
+                      _invoiceMoney(
+                        items.fold<double>(
+                          0,
+                          (sum, item) => sum + item.lineTotal,
+                        ),
+                      ),
+                      muted,
+                    ),
+                    _professionalTotalRow(
+                      'Taxable amount',
+                      _invoiceMoney(taxableValue),
+                      muted,
+                    ),
+                    _professionalTotalRow(
+                      'CGST (9%)',
+                      _invoiceMoney(cgst),
+                      muted,
+                    ),
+                    _professionalTotalRow(
+                      'SGST (9%)',
+                      _invoiceMoney(cgst),
+                      muted,
+                    ),
                     pw.Divider(color: border),
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(vertical: 7, horizontal: 8),
+                      padding: const pw.EdgeInsets.symmetric(
+                        vertical: 7,
+                        horizontal: 8,
+                      ),
                       color: paleBlue,
-                      child: _professionalTotalRow('TOTAL AMOUNT', _invoiceMoney(order.amount), navy, bold: true),
+                      child: _professionalTotalRow(
+                        'TOTAL AMOUNT',
+                        _invoiceMoney(order.amount),
+                        navy,
+                        bold: true,
+                      ),
                     ),
                     pw.SizedBox(height: 8),
                     pw.Align(
                       alignment: pw.Alignment.centerLeft,
-                      child: pw.Text('Amount in words', style: pw.TextStyle(color: navy, fontSize: 8.5, fontWeight: pw.FontWeight.bold)),
+                      child: pw.Text(
+                        'Amount in words',
+                        style: pw.TextStyle(
+                          color: navy,
+                          fontSize: 8.5,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
                     ),
                     pw.SizedBox(height: 3),
                     pw.Align(
                       alignment: pw.Alignment.centerLeft,
-                      child: pw.Text('Indian Rupees ${_amountInWords(order.amount)} only', style: pw.TextStyle(color: muted, fontSize: 8.3)),
+                      child: pw.Text(
+                        'Indian Rupees ${_amountInWords(order.amount)} only',
+                        style: pw.TextStyle(color: muted, fontSize: 8.3),
+                      ),
                     ),
                   ],
                 ),
@@ -4493,7 +4408,14 @@ pw.Widget _invoiceInfoCard({
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(title, style: pw.TextStyle(color: accent, fontSize: 9, fontWeight: pw.FontWeight.bold)),
+        pw.Text(
+          title,
+          style: pw.TextStyle(
+            color: accent,
+            fontSize: 9,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
         pw.SizedBox(height: 7),
         ...children.expand((child) => [child, pw.SizedBox(height: 3)]),
       ],
@@ -4503,53 +4425,95 @@ pw.Widget _invoiceInfoCard({
 
 pw.Widget _invoiceStrong(String text, PdfColor color) => pw.Text(
   text,
-  style: pw.TextStyle(color: color, fontSize: 11, fontWeight: pw.FontWeight.bold),
-);
-
-pw.Widget _invoiceText(String text, PdfColor color) => pw.Text(
-  text,
-  style: pw.TextStyle(color: color, fontSize: 8.2),
-);
-
-pw.Widget _invoiceKeyValue(String label, String value, PdfColor muted) => pw.Padding(
-  padding: const pw.EdgeInsets.only(bottom: 3),
-  child: pw.Row(
-    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-    children: [
-      pw.Text(label, style: pw.TextStyle(color: muted, fontSize: 7.8)),
-      pw.Text(value, style: const pw.TextStyle(fontSize: 8.2)),
-    ],
+  style: pw.TextStyle(
+    color: color,
+    fontSize: 11,
+    fontWeight: pw.FontWeight.bold,
   ),
 );
 
+pw.Widget _invoiceText(String text, PdfColor color) =>
+    pw.Text(text, style: pw.TextStyle(color: color, fontSize: 8.2));
+
+pw.Widget _invoiceKeyValue(String label, String value, PdfColor muted) =>
+    pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 3),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(label, style: pw.TextStyle(color: muted, fontSize: 7.8)),
+          pw.Text(value, style: const pw.TextStyle(fontSize: 8.2)),
+        ],
+      ),
+    );
+
 pw.Widget _professionalInvoiceHeaderCell(String text) => pw.Padding(
   padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 7),
-  child: pw.Text(text, textAlign: pw.TextAlign.center, style: pw.TextStyle(color: PdfColors.white, fontSize: 7.2, fontWeight: pw.FontWeight.bold)),
+  child: pw.Text(
+    text,
+    textAlign: pw.TextAlign.center,
+    style: pw.TextStyle(
+      color: PdfColors.white,
+      fontSize: 7.2,
+      fontWeight: pw.FontWeight.bold,
+    ),
+  ),
 );
 
-pw.Widget _professionalInvoiceBodyCell(String text, {required pw.TextAlign align}) => pw.Padding(
+pw.Widget _professionalInvoiceBodyCell(
+  String text, {
+  required pw.TextAlign align,
+}) => pw.Padding(
   padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 7),
-  child: pw.Text(text, textAlign: align, maxLines: 2, style: const pw.TextStyle(fontSize: 8.3)),
+  child: pw.Text(
+    text,
+    textAlign: align,
+    maxLines: 2,
+    style: const pw.TextStyle(fontSize: 8.3),
+  ),
 );
 
-pw.Widget _professionalTotalRow(String label, String value, PdfColor color, {bool bold = false}) => pw.Padding(
+pw.Widget _professionalTotalRow(
+  String label,
+  String value,
+  PdfColor color, {
+  bool bold = false,
+}) => pw.Padding(
   padding: const pw.EdgeInsets.symmetric(vertical: 3),
   child: pw.Row(
     children: [
-      pw.Expanded(child: pw.Text(label, style: pw.TextStyle(color: color, fontSize: bold ? 10 : 8.6, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal))),
-      pw.Text(value, style: pw.TextStyle(color: color, fontSize: bold ? 12 : 8.6, fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal)),
+      pw.Expanded(
+        child: pw.Text(
+          label,
+          style: pw.TextStyle(
+            color: color,
+            fontSize: bold ? 10 : 8.6,
+            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          ),
+        ),
+      ),
+      pw.Text(
+        value,
+        style: pw.TextStyle(
+          color: color,
+          fontSize: bold ? 12 : 8.6,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
     ],
   ),
 );
 
 String _invoiceMoney(double value) => 'Rs. ${value.toStringAsFixed(2)}';
 
-String _invoiceDate(DateTime date) => '${date.day.toString().padLeft(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.month - 1]} ${date.year}';
+String _invoiceDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.month - 1]} ${date.year}';
 
 String _amountInWords(double amount) {
   final value = amount.round();
   if (value == 0) return 'Zero';
-  if (value >= 10000000) return '${(value / 10000000).toStringAsFixed(2)} crore';
+  if (value >= 10000000)
+    return '${(value / 10000000).toStringAsFixed(2)} crore';
   if (value >= 100000) return '${(value / 100000).toStringAsFixed(2)} lakh';
   if (value >= 1000) return '${(value / 1000).toStringAsFixed(2)} thousand';
   return value.toString();
@@ -4656,7 +4620,9 @@ class _OrdersOrderDetailsDialog extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(999),
                                     color: Colors.white.withValues(alpha: 0.16),
                                     border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.28),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.28,
+                                      ),
                                     ),
                                   ),
                                   child: Row(
@@ -4699,7 +4665,10 @@ class _OrdersOrderDetailsDialog extends StatelessWidget {
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded, color: Colors.white),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                        ),
                         style: IconButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.1),
                         ),
@@ -4716,7 +4685,10 @@ class _OrdersOrderDetailsDialog extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _OrdersMetaGrid(order: order, statusColor: statusColor),
+                          _OrdersMetaGrid(
+                            order: order,
+                            statusColor: statusColor,
+                          ),
                           const SizedBox(height: 22),
                           Row(
                             children: [
@@ -4776,7 +4748,9 @@ class _OrdersOrderDetailsDialog extends StatelessWidget {
                             side: const BorderSide(color: Color(0xFFF3C4C4)),
                             backgroundColor: const Color(0xFFFFF6F6),
                             minimumSize: const Size(0, 48),
-                            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -4793,7 +4767,9 @@ class _OrdersOrderDetailsDialog extends StatelessWidget {
                             backgroundColor: const Color(0xFF16A34A),
                             minimumSize: const Size(0, 48),
                             elevation: 0,
-                            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -4811,7 +4787,9 @@ class _OrdersOrderDetailsDialog extends StatelessWidget {
                             backgroundColor: const Color(0xFF1D56C3),
                             minimumSize: const Size(0, 48),
                             elevation: 0,
-                            textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                            textStyle: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -4841,8 +4819,9 @@ class _OrdersMetaGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 760;
-        final columnWidth =
-            compact ? constraints.maxWidth : (constraints.maxWidth - 12) / 2;
+        final columnWidth = compact
+            ? constraints.maxWidth
+            : (constraints.maxWidth - 12) / 2;
 
         return Wrap(
           spacing: 12,
@@ -4933,9 +4912,7 @@ class _OrdersMetaItem extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: highlight
-              ? const Color(0xFFBBD3FF)
-              : const Color(0xFFE7ECF6),
+          color: highlight ? const Color(0xFFBBD3FF) : const Color(0xFFE7ECF6),
           width: highlight ? 1.4 : 1,
         ),
         boxShadow: const [
@@ -4953,8 +4930,9 @@ class _OrdersMetaItem extends StatelessWidget {
             height: 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: (highlight ? const Color(0xFF1D56C3) : accent)
-                  .withValues(alpha: 0.1),
+              color: (highlight ? const Color(0xFF1D56C3) : accent).withValues(
+                alpha: 0.1,
+              ),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
@@ -5016,6 +4994,22 @@ class _OrdersMetaItem extends StatelessWidget {
       ),
     );
   }
+}
+
+InputDecoration premiumDecoration({
+  required String label,
+  String? hint,
+  Widget? suffixIcon,
+  String? hintText,
+}) {
+  return InputDecoration(
+    labelText: label,
+    hintText: hint,
+    suffixIcon: suffixIcon,
+    isDense: true,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+  );
 }
 
 class _OrdersItemsTable extends StatelessWidget {
@@ -5147,8 +5141,9 @@ class _OrdersItemsTable extends StatelessWidget {
                                   height: 30,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF1D56C3)
-                                        .withValues(alpha: 0.08),
+                                    color: const Color(
+                                      0xFF1D56C3,
+                                    ).withValues(alpha: 0.08),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Icon(
@@ -5236,9 +5231,7 @@ class _OrdersItemsTable extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  _rupee(
-                    items.fold<double>(0, (sum, i) => sum + i.lineTotal),
-                  ),
+                  _rupee(items.fold<double>(0, (sum, i) => sum + i.lineTotal)),
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 15,
@@ -5252,7 +5245,6 @@ class _OrdersItemsTable extends StatelessWidget {
       ),
     );
   }
-  
 }
 
 String _normalizeStatus(String raw) {

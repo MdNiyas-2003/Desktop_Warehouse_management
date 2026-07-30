@@ -1,12 +1,11 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:desktop/core/widgets/app_snackbar.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/network/backend_api.dart';
 import '../../core/theme/app_colors.dart';
@@ -63,21 +62,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     await file.writeAsBytes(bytes);
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('PDF saved to ${file.path}'),
-        action: SnackBarAction(
-          label: 'Open Folder',
-          onPressed: () => _openContainingFolder(file.path),
-        ),
-        duration: const Duration(seconds: 6),
-      ),
+    AppSnackBar.success(
+      message: 'PDF saved to ${file.path}',
     );
   } catch (e) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not export PDF: $e')),
-    );
+    AppSnackBar.failed(message: 'Could not export PDF: $e');
   } finally {
     if (mounted) setState(() => _exporting = false);
   }
@@ -95,38 +85,14 @@ Future<void> _exportCsv(_ReportsData data) async {
     await file.writeAsString(csv);
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('CSV saved to ${file.path}'),
-        action: SnackBarAction(
-          label: 'Open Folder',
-          onPressed: () => _openContainingFolder(file.path),
-        ),
-        duration: const Duration(seconds: 6),
-      ),
+    AppSnackBar.success(
+      message: 'CSV saved to ${file.path}',
     );
   } catch (e) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not export CSV: $e')),
-    );
+    AppSnackBar.failed(message: 'Could not export CSV: $e');
   } finally {
     if (mounted) setState(() => _exporting = false);
-  }
-}
-
-Future<void> _openContainingFolder(String filePath) async {
-  try {
-    final dirPath = File(filePath).parent.path;
-    if (Platform.isWindows) {
-      await Process.run('explorer', [dirPath]);
-    } else if (Platform.isMacOS) {
-      await Process.run('open', [dirPath]);
-    } else if (Platform.isLinux) {
-      await Process.run('xdg-open', [dirPath]);
-    }
-  } catch (_) {
-    // Silently ignore — the SnackBar already showed the path.
   }
 }
 
@@ -194,9 +160,9 @@ class _ReportsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(22, 20, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(18),
         gradient: const LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
@@ -204,26 +170,26 @@ class _ReportsHeader extends StatelessWidget {
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x2A1D56C3),
-            blurRadius: 26,
-            offset: Offset(0, 12),
+            color: Color(0x1F1D56C3),
+            blurRadius: 18,
+            offset: Offset(0, 8),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 42,
+            height: 42,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
             ),
-            child: const Icon(Icons.insights_rounded, color: Colors.white, size: 24),
+            child: const Icon(Icons.insights_rounded, color: Colors.white, size: 22),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,16 +199,16 @@ class _ReportsHeader extends StatelessWidget {
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 22,
+                    fontSize: 18,
                     letterSpacing: -0.3,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   'Live sales, product, and region analytics from your order data.',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.78),
-                    fontSize: 12.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -291,19 +257,19 @@ class _ReportsHeader extends StatelessWidget {
                 ),
               ],
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (busy)
                       const SizedBox(
-                        width: 15,
-                        height: 15,
+                        width: 14,
+                        height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     else
-                      const Icon(Icons.download_rounded, size: 16, color: Color(0xFF1D56C3)),
-                    const SizedBox(width: 8),
+                      const Icon(Icons.download_rounded, size: 15, color: Color(0xFF1D56C3)),
+                    const SizedBox(width: 6),
                     Text(
                       busy ? 'Exporting…' : 'Export',
                       style: const TextStyle(
@@ -337,13 +303,15 @@ class _ReportsBody extends StatelessWidget {
       children: [
         LayoutBuilder(
           builder: (context, constraints) {
-            final twoColumn = constraints.maxWidth >= 1200;
+            final twoColumn = constraints.maxWidth >= 900;
+            final cardWidth = twoColumn ? (constraints.maxWidth - 12) * 0.5 : constraints.maxWidth;
             return Wrap(
-              spacing: 16,
-              runSpacing: 16,
+              spacing: 10,
+              runSpacing: 10,
               children: [
                 SizedBox(
-                  width: twoColumn ? (constraints.maxWidth - 16) * 0.66 : constraints.maxWidth,
+                  width: cardWidth,
+                  height: 290,
                   child: _PremiumBarChartCard(
                     title: 'Daily Sales',
                     subtitle: 'Order value for the last 7 days',
@@ -353,7 +321,8 @@ class _ReportsBody extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: twoColumn ? (constraints.maxWidth - 16) * 0.32 : constraints.maxWidth,
+                  width: cardWidth,
+                  height: 290,
                   child: _PremiumDonutChartCard(
                     title: 'Region Mix',
                     subtitle: 'Order value contribution by region',
@@ -366,7 +335,7 @@ class _ReportsBody extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 8),
         LayoutBuilder(
           builder: (context, constraints) {
             final columns = constraints.maxWidth >= 900 ? 3 : 1;
@@ -375,8 +344,8 @@ class _ReportsBody extends StatelessWidget {
                 ? constraints.maxWidth
                 : (constraints.maxWidth - spacing * (columns - 1)) / columns;
             return Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
+              spacing: spacing - 4,
+              runSpacing: spacing - 4,
               children: [
                 SizedBox(
                   width: width,
@@ -454,7 +423,7 @@ class _TopOrdersTable extends StatelessWidget {
         children: [
           Container(
             color: const Color(0xFFF4F7FE),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: const Row(
               children: [
                 Expanded(flex: 14, child: _HeaderText('Order ID')),
@@ -469,7 +438,7 @@ class _TopOrdersTable extends StatelessWidget {
             final o = orders[i];
             return Container(
               color: i.isEven ? Colors.white : const Color(0xFFFAFBFF),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
                   Expanded(flex: 14, child: _CellText(o.orderId)),
@@ -481,7 +450,7 @@ class _TopOrdersTable extends StatelessWidget {
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: _reportStatusColor(o.status).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(999),
@@ -515,7 +484,7 @@ class _HeaderText extends StatelessWidget {
         text,
         style: const TextStyle(
           fontWeight: FontWeight.w700,
-          fontSize: 11.5,
+          fontSize: 10.5,
           color: Color(0xFF6C7A94),
         ),
       );
@@ -530,7 +499,7 @@ class _CellText extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(
-          fontSize: 12.5,
+          fontSize: 11.5,
           fontWeight: FontWeight.w600,
           color: Color(0xFF29344A),
         ),
@@ -544,15 +513,15 @@ class _ReportsLoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ReportCardShell(
-      padding: const EdgeInsets.all(40),
+      padding: const EdgeInsets.all(28),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 2.6)),
-            SizedBox(height: 14),
+            SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
+            SizedBox(height: 12),
             Text('Crunching the latest order data…',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
           ],
         ),
       ),
@@ -567,7 +536,7 @@ class _ReportsErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ReportCardShell(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -575,12 +544,12 @@ class _ReportsErrorState extends StatelessWidget {
             children: [
               Icon(Icons.error_outline_rounded, color: AppColors.danger),
               SizedBox(width: 8),
-              Text('Unable to load reports', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              Text('Unable to load reports', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
             ],
           ),
           const SizedBox(height: 6),
-          Text(message, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-          const SizedBox(height: 12),
+          Text(message, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+          const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh_rounded, size: 16),
@@ -597,15 +566,15 @@ class _ReportsEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ReportCardShell(
-      padding: const EdgeInsets.all(40),
+      padding: const EdgeInsets.all(28),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Icon(Icons.insert_chart_outlined_rounded, size: 34, color: AppColors.textMuted),
+            Icon(Icons.insert_chart_outlined_rounded, size: 28, color: AppColors.textMuted),
             SizedBox(height: 10),
             Text('No orders yet — reports will populate once orders come in.',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12.5)),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 11.5)),
           ],
         ),
       ),
@@ -622,13 +591,13 @@ class _ReportCardShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: padding ?? const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      padding: padding ?? const EdgeInsets.fromLTRB(14, 14, 14, 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE7ECF6)),
         boxShadow: const [
-          BoxShadow(color: Color(0x0A102A62), blurRadius: 20, offset: Offset(0, 8)),
+          BoxShadow(color: Color(0x08102A62), blurRadius: 14, offset: Offset(0, 6)),
         ],
       ),
       child: child,
@@ -652,19 +621,19 @@ class _ChartHeader extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 36,
-          height: 36,
+          width: 32,
+          height: 32,
           alignment: Alignment.center,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(11)),
-          child: Icon(icon, size: 18, color: color),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+          child: Icon(icon, size: 16, color: color),
         ),
-        const SizedBox(width: 11),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Color(0xFF10203E))),
-              Text(subtitle, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Color(0xFF10203E))),
+              Text(subtitle, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
             ],
           ),
         ),
@@ -700,15 +669,15 @@ class _PremiumBarChartCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _ChartHeader(title: title, subtitle: subtitle, icon: Icons.bar_chart_rounded, color: accent),
-          const SizedBox(height: 22),
+          const SizedBox(height: 14),
           SizedBox(
-            height: 190,
+            height: 150,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: List.generate(values.length, (i) {
                 final v = values[i];
-                final fraction = maxValue == 0 ? 0.0 : (v / maxValue).clamp(0.04, 1.0);
+                final fraction = maxValue == 0 ? 0.0 : (v / maxValue).clamp(0.05, 1.0);
                 final isMax = v == maxValue && v > 0;
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -716,21 +685,21 @@ class _PremiumBarChartCard extends StatelessWidget {
                     Text(
                       _compactNumber(v),
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 9,
                         fontWeight: FontWeight.w700,
                         color: isMax ? accent : const Color(0xFF8592AB),
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0, end: fraction),
                       duration: const Duration(milliseconds: 600),
                       curve: Curves.easeOutCubic,
                       builder: (context, value, _) => Container(
-                        width: 30,
-                        height: 140 * value,
+                        width: 22,
+                        height: 108 * value,
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(9),
+                          borderRadius: BorderRadius.circular(8),
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
@@ -741,8 +710,8 @@ class _PremiumBarChartCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 9),
-                    Text(labels[i], style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
+                    const SizedBox(height: 6),
+                    Text(labels[i], style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
                   ],
                 );
               }),
@@ -778,10 +747,10 @@ class _PremiumDonutChartCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _ChartHeader(title: title, subtitle: subtitle, icon: Icons.donut_large_rounded, color: AppColors.primary),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           if (items.isEmpty)
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 30),
+              padding: EdgeInsets.symmetric(vertical: 26),
               child: Center(child: Text('No data available', style: TextStyle(color: AppColors.textMuted, fontSize: 12))),
             )
           else ...[
@@ -812,18 +781,18 @@ class _PremiumDonutChartCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
             Column(
               children: items.map((slice) {
                 final pct = total == 0 ? 0.0 : (slice.value / total) * 100;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      Container(width: 9, height: 9, decoration: BoxDecoration(color: slice.color, shape: BoxShape.circle)),
-                      const SizedBox(width: 9),
-                      Expanded(child: Text(slice.label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Color(0xFF29344A)))),
-                      Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: slice.color)),
+                      Container(width: 8, height: 8, decoration: BoxDecoration(color: slice.color, shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(slice.label, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF29344A)))),
+                      Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: slice.color)),
                     ],
                   ),
                 );
@@ -897,39 +866,39 @@ class _PremiumMetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _ReportCardShell(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
-                child: Icon(icon, size: 22, color: color),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, size: 20, color: color),
               ),
               const Spacer(),
               if (positive)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(color: const Color(0xFF16A34A).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(999)),
-                  child: const Icon(Icons.trending_up_rounded, size: 15, color: Color(0xFF16A34A)),
+                  child: const Icon(Icons.trending_up_rounded, size: 14, color: Color(0xFF16A34A)),
                 ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 14),
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800, color: Color(0xFF10203E), letterSpacing: -0.4),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF10203E), letterSpacing: -0.35),
           ),
-          const SizedBox(height: 7),
-          Text(delta, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: positive ? const Color(0xFF16A34A) : AppColors.textMuted)),
+          const SizedBox(height: 6),
+          Text(delta, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: positive ? const Color(0xFF16A34A) : AppColors.textMuted)),
         ],
       ),
     );

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/network/backend_api.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_snackbar.dart';
 import '../../core/widgets/charts.dart';
 import '../../core/widgets/premium_widgets.dart';
 
@@ -62,18 +63,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           order: order,
           onApprove: () async {
             if (order.status == 'Approved') {
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(content: Text('Order is already Approved.')),
-              );
+              AppSnackBar.warning(message: 'Order is already Approved.');
               return;
             }
             if (order.id == null) {
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'This is demo data. Use Firestore order to update status.',
-                  ),
-                ),
+              AppSnackBar.warning(
+                message: 'This is demo data. Use Firestore order to update status.',
               );
               return;
             }
@@ -84,18 +79,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
           onReject: () async {
             if (order.status == 'Rejected') {
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(content: Text('Order is already Rejected.')),
-              );
+              AppSnackBar.warning(message: 'Order is already Rejected.');
               return;
             }
             if (order.id == null) {
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'This is demo data. Use Firestore order to update status.',
-                  ),
-                ),
+              AppSnackBar.warning(
+                message: 'This is demo data. Use Firestore order to update status.',
               );
               return;
             }
@@ -140,11 +129,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _HeroHeader(
-                        loading:
-                            orderSnapshot.connectionState ==
-                            ConnectionState.waiting,
-                      ),
+                      // _HeroHeader(
+                      //   loading:
+                      //       orderSnapshot.connectionState ==
+                      //       ConnectionState.waiting,
+                      // ),
                       const SizedBox(height: 14),
                       LayoutBuilder(
                         builder: (context, constraints) {
@@ -596,9 +585,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to update order status. ($e)')),
-      );
+      AppSnackBar.failed(message: 'Unable to update order status. ($e)');
     }
   }
 
@@ -626,9 +613,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order ID not found in live orders.')),
-      );
+      AppSnackBar.warning(message: 'Order ID not found in live orders.');
       return;
     }
 
@@ -645,75 +630,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
     setState(() => _selectedOrderId = matched!.id ?? matched.orderId);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Dispatched ${matched.orderId} successfully.')),
-    );
+    AppSnackBar.success(message: 'Dispatched ${matched.orderId} successfully.');
   }
 }
 
-class _HeroHeader extends StatelessWidget {
-  const _HeroHeader({required this.loading});
+// class _HeroHeader extends StatelessWidget {
+//   const _HeroHeader({required this.loading});
 
-  final bool loading;
+//   final bool loading;
 
-  @override
-  Widget build(BuildContext context) {
-    return PremiumCard(
-      padding: const EdgeInsets.all(18),
-      borderRadius: 18,
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFFDFEFF), Color(0xFFF5F9FF)],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(15),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2E5BFF), Color(0xFF5A8BFF)],
-              ),
-            ),
-            child: const Icon(Icons.warehouse_rounded, color: Colors.white),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Warehouse/Admin Dashboard',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  loading
-                      ? 'Connecting to live orders and stock data...'
-                      : 'Live order pipeline, dispatch control, inventory allocation and user management.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          FilledButton.tonalIcon(
-            onPressed: () {},
-            icon: const Icon(Icons.sync_rounded, size: 18),
-            label: Text(loading ? 'Syncing' : 'Live Data'),
-          ),
-        ],
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return PremiumCard(
+//       padding: const EdgeInsets.all(18),
+//       borderRadius: 18,
+//       gradient: const LinearGradient(
+//         begin: Alignment.topLeft,
+//         end: Alignment.bottomRight,
+//         colors: [Color(0xFFFDFEFF), Color(0xFFF5F9FF)],
+//       ),
+//       child: Row(
+//         children: [
+//           //       Container(
+//           //         width: 48,
+//           //         height: 48,
+//           //         decoration: BoxDecoration(
+//           //           borderRadius: BorderRadius.circular(15),
+//           //           gradient: const LinearGradient(
+//           //             colors: [Color(0xFF2E5BFF), Color(0xFF5A8BFF)],
+//           //           ),
+//           //         ),
+//           //         child: const Icon(Icons.warehouse_rounded, color: Colors.white),
+//           //       ),
+//           //       const SizedBox(width: 14),
+//           //       Expanded(
+//           //         child: Column(
+//           //           crossAxisAlignment: CrossAxisAlignment.start,
+//           //           children: [
+//           //             Text(
+//           //               'Warehouse/Admin Dashboard',
+//           //               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+//           //                 fontSize: 23,
+//           //                 fontWeight: FontWeight.w800,
+//           //               ),
+//           //             ),
+//           //             const SizedBox(height: 4),
+//           //             Text(
+//           //               loading
+//           //                   ? 'Connecting to live orders and stock data...'
+//           //                   : 'Live order pipeline, dispatch control, inventory allocation and user management.',
+//           //               style: Theme.of(
+//           //                 context,
+//           //               ).textTheme.bodyMedium?.copyWith(fontSize: 13),
+//           //             ),
+//           //           ],
+//           //         ),
+//           //       ),
+//           //       const SizedBox(width: 12),
+//           //       FilledButton.tonalIcon(
+//           //         onPressed: () {},
+//           //         icon: const Icon(Icons.sync_rounded, size: 18),
+//           //         label: Text(loading ? 'Syncing' : 'Live Data'),
+//           //       ),
+//         ],
+//       ),
+//     );
+//   }
+// }
 
 class _KpiData {
   const _KpiData(this.label, this.value, this.icon, this.color, this.delta);
@@ -1788,35 +1771,25 @@ class _DispatchCardState extends State<_DispatchCard> {
     if (orderCode.isEmpty ||
         transportName.isEmpty ||
         dispatchAssignee.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Enter order ID, transport name and dispatch assignee.',
-          ),
-        ),
+      AppSnackBar.warning(
+        message: 'Enter order ID, transport name and dispatch assignee.',
       );
       return;
     }
 
     if (dispatchDateTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose dispatch time.')),
-      );
+      AppSnackBar.warning(message: 'Please choose dispatch time.');
       return;
     }
 
     if (expectedDeliveryDateTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose expected delivery time.')),
-      );
+      AppSnackBar.warning(message: 'Please choose expected delivery time.');
       return;
     }
 
     if (expectedDeliveryDateTime.isBefore(dispatchDateTime)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Expected delivery must be after dispatch time.'),
-        ),
+      AppSnackBar.warning(
+        message: 'Expected delivery must be after dispatch time.',
       );
       return;
     }

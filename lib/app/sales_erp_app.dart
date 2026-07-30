@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/login_screen.dart';
 import '../core/widgets/app_shell.dart';
+import '../core/widgets/app_snackbar.dart';
 
 class SalesErpApp extends StatelessWidget {
   const SalesErpApp({super.key});
@@ -11,11 +12,13 @@ class SalesErpApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: appScaffoldMessengerKey,
+      navigatorKey: appNavigatorKey,
       debugShowCheckedModeBanner: false,
-      title: 'Sales ERP',
+      title: 'Warehouse Management',
       theme: AppTheme.light(),
       home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.userChanges(),
+        stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
@@ -29,12 +32,12 @@ class SalesErpApp extends StatelessWidget {
           if (!isSignedIn) {
             return const LoginScreen();
           }
-
-          return DesktopEntry(
-            onLogout: () {
-              FirebaseAuth.instance.signOut();
-            },
-          );
+        
+            return DesktopEntry(
+              onLogout: () {
+                FirebaseAuth.instance.signOut();
+              },
+            );
         },
       ),
     );
