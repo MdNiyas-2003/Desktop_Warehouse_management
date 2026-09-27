@@ -22,6 +22,7 @@ class AppNavItem {
 
 const List<AppNavItem> appNavItems = [
   AppNavItem(label: 'Dashboard', icon: Icons.space_dashboard_rounded, index: 0),
+  AppNavItem(label: 'Sales', icon: Icons.query_stats_rounded, index: 13),
   AppNavItem(label: 'Orders', icon: Icons.receipt_long_rounded, index: 1),
   // AppNavItem(label: 'Products', icon: Icons.inventory_2_rounded, index: 2),
   // AppNavItem(label: 'Inventory', icon: Icons.warehouse_rounded, index: 3),
