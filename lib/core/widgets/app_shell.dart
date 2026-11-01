@@ -1,6 +1,6 @@
 import 'package:desktop/features/accounts/ledger_screen.dart';
 import 'package:desktop/features/accounts/payment_entry/payment_entry_screen.dart';
-import 'package:desktop/features/sales/sales.dart';
+import 'package:desktop/features/pos/counter_billing_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../features/dashboard/dashboard_screen.dart';
