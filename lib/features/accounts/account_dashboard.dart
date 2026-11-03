@@ -116,7 +116,7 @@ class _SummaryCard extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundColor: color.withOpacity(.1),
+              backgroundColor: color.withValues(alpha: .1),
               child: Icon(icon, color: color),
             ),
             const SizedBox(width: 15),
@@ -143,7 +143,6 @@ class _SummaryCard extends StatelessWidget {
 
 class _MenuCard extends StatelessWidget {
   const _MenuCard({
-    super.key,
     required this.title,
     required this.icon,
     this.onTap,

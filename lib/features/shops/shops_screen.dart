@@ -85,7 +85,7 @@ class _ShopsScreenState extends State<ShopsScreen> {
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.blue.withOpacity(0.12),
+                  color: Colors.blue.withValues(alpha: 0.12),
                   blurRadius: 30,
                   offset: const Offset(0, 12),
                 ),
@@ -330,7 +330,7 @@ class _ShopsScreenState extends State<ShopsScreen> {
 }
 
 class _CreateCustomerDialog extends StatefulWidget {
-  const _CreateCustomerDialog({super.key, this.customer});
+  const _CreateCustomerDialog({this.customer});
 
   final Map<String, dynamic>? customer;
 
@@ -376,7 +376,6 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
   final _alternateMobileController = TextEditingController();
   final _officePhoneController = TextEditingController();
   final _whatsappController = TextEditingController();
-  final _gstTypeController = TextEditingController();
   final _fssaiController = TextEditingController();
   final _drugLicenseController = TextEditingController();
   final _msmeController = TextEditingController();
@@ -397,7 +396,6 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
   String? _businessType;
   String? _state;
   bool _sameBillingAddress = false;
-  bool _addAnotherAfterSave = false;
   _CustomerDialogSection _activeSection = _CustomerDialogSection.companyDetails;
   final ScrollController _contentScrollController = ScrollController();
   final Map<_CustomerDialogSection, GlobalKey> _sectionKeys = {
@@ -1322,7 +1320,7 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
                     FilledButton.icon(
                       onPressed: () {
                         if (!_formKey.currentState!.validate()) return;
-                        final address = [
+                        [
                           _addressLine1Controller.text.trim(),
                           _addressLine2Controller.text.trim(),
                           _cityController.text.trim(),
@@ -1467,7 +1465,7 @@ class _CreateCustomerDialogState extends State<_CreateCustomerDialog> {
     bool required = false,
   }) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(labelText: label, isDense: true),
       items: items
           .map((item) => DropdownMenuItem(value: item, child: Text(item)))
@@ -1547,7 +1545,6 @@ enum _CustomerDialogSection {
 
 class _RowActions extends StatelessWidget {
   const _RowActions({
-    super.key,
     required this.shop,
     required this.onEdit,
     required this.onDelete,

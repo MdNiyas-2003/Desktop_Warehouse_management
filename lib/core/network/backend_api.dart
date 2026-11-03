@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:desktop/features/accounts/payment_entry/models/payment_model.dart';
 import 'package:desktop/features/supplier/model/supplier_model.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class BackendApi {
@@ -22,7 +23,7 @@ class BackendApi {
     final response = await _client.get(_uri('/customers'));
     _throwIfNotOk(response);
     final data = jsonDecode(response.body);
-    print("Customers Response: ${data}");
+    debugPrint("Customers Response: $data");
     if (data is! List) return const [];
     return data
         .whereType<Map>()
@@ -143,7 +144,7 @@ class BackendApi {
   Future<Map<String, dynamic>> getDraftOrderById(String id) async {
     final response = await _client.get(_uri('/orders/$id'));
 
-    print(response.body);
+    debugPrint(response.body);
 
     _throwIfNotOk(response);
 
@@ -240,7 +241,7 @@ Future<List<Map<String, dynamic>>> getSuppliers() async {
 
     if (data is! List) return [];
 
-    return (data as List)
+    return (data)
         .map(
           (e) => CustomerInvoiceModel.fromJson(
             Map<String, dynamic>.from(e as Map),

@@ -1,51 +1,54 @@
 import 'dart:convert';
+
+import 'package:desktop/core/network/backend_api.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/supplier_model.dart';
 
 class SupplierService {
-  final _client = http.Client();
-  static const String baseUrl = 'http://localhost:4000/api';
+  SupplierService({http.Client? client}) : _client = client ?? http.Client();
 
-  Uri _uri(String path) => Uri.parse('$baseUrl$path');
+  final http.Client _client;
 
-  Future<List<SupplierModel>> getSuppliers() async {
-    try {
-      final response = await _client.get(_uri('/suppliers'));
-      if (response.statusCode != 200) return [];
-      final data = jsonDecode(response.body);
-      if (data is! List) return [];
-      return data
-          .map((item) => SupplierModel.fromJson(item as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      print('Error fetching suppliers: $e');
-      return [];
+  Uri _uri(String path, [Map<String, String>? queryParameters]) {
+    return Uri.parse('${BackendApi.baseUrl}$path').replace(
+      queryParameters: queryParameters,
+    );
+  }
+
+  Future<List<SupplierModel>> getSuppliers({String? search}) async {
+    final query = search?.trim();
+    final response = await _client.get(
+      _uri('/suppliers', query == null || query.isEmpty ? null : {'q': query}),
+    );
+    if (response.statusCode != 200) {
+      throw _responseException(response, 'Unable to load suppliers');
     }
+
+    final data = jsonDecode(response.body);
+    if (data is! List) {
+      throw const FormatException('Supplier response must be a list');
+    }
+    return data
+        .whereType<Map>()
+        .map((item) => SupplierModel.fromJson(Map<String, dynamic>.from(item)))
+        .toList();
   }
 
   Future<SupplierModel> getSupplierById(int id) async {
-    try {
-      final response = await _client.get(_uri('/suppliers/$id'));
-      if (response.statusCode != 200)
-        throw Exception('Failed to fetch supplier');
-      final data = jsonDecode(response.body);
-      return SupplierModel.fromJson(data is Map<String, dynamic> ? data : {});
-    } catch (e) {
-      print('Error fetching supplier: $e');
-      rethrow;
-    }
+    final suppliers = await getSuppliers();
+    return suppliers.firstWhere(
+      (supplier) => supplier.id == id.toString(),
+      orElse: () => throw Exception('Supplier not found'),
+    );
   }
 
   Future<SupplierModel> getSupplierByName(String name) async {
-    try {
-      final response = await _client.get(_uri('/suppliers/search?name=$name'));
-      if (response.statusCode != 200) throw Exception('Supplier not found');
-      final data = jsonDecode(response.body);
-      return SupplierModel.fromJson(data is Map<String, dynamic> ? data : {});
-    } catch (e) {
-      print('Error fetching supplier by name: $e');
-      rethrow;
-    }
+    final suppliers = await getSuppliers(search: name);
+    return suppliers.firstWhere(
+      (supplier) => supplier.name.toLowerCase() == name.trim().toLowerCase(),
+      orElse: () => throw Exception('Supplier not found'),
+    );
   }
 
   Future<SupplierModel> addSupplier({
@@ -55,27 +58,40 @@ class SupplierService {
     required String gstin,
     required String address,
     required String location,
+    String contact = '',
   }) async {
-    try {
-      final response = await _client.post(
-        _uri('/suppliers'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': name,
-          'code': code,
-          'phone': phone,
-          'gstin': gstin,
-          'address': address,
-          'location': location,
-          'outstandingBalance': 0.0,
-        }),
-      );
-      if (response.statusCode != 201) throw Exception('Failed to add supplier');
-      final data = jsonDecode(response.body);
-      return SupplierModel.fromJson(data is Map<String, dynamic> ? data : {});
-    } catch (e) {
-      print('Error adding supplier: $e');
-      rethrow;
+    final response = await _client.post(
+      _uri('/suppliers'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name.trim(),
+        'code': code.trim(),
+        'contact': contact.trim(),
+        'phone': phone.trim(),
+        'gstin': gstin.trim(),
+        'address': address.trim(),
+        'location': location.trim(),
+      }),
+    );
+    if (response.statusCode != 201) {
+      throw _responseException(response, 'Unable to create supplier');
     }
+    final data = jsonDecode(response.body);
+    if (data is! Map) {
+      throw const FormatException('Supplier response must be an object');
+    }
+    return SupplierModel.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  Exception _responseException(http.Response response, String fallback) {
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && body['message'] != null) {
+        return Exception(body['message'].toString());
+      }
+    } on FormatException {
+      // Use the status-based message for non-JSON responses.
+    }
+    return Exception('$fallback (HTTP ${response.statusCode})');
   }
 }

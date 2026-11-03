@@ -68,7 +68,7 @@ class SectionHeader extends StatelessWidget {
             ],
           ),
         ),
-        if (action != null) action!,
+        ?action,
       ],
     );
   }
@@ -120,7 +120,7 @@ class MetricCard extends StatelessWidget {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(icon, color: color),
@@ -208,7 +208,7 @@ class StatusBadge extends StatelessWidget {
         vertical: compact ? 5 : 6,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -457,7 +457,7 @@ class PanelHeader extends StatelessWidget {
             ],
           ),
         ),
-        if (trailing != null) trailing!,
+        ?trailing,
       ],
     );
   }

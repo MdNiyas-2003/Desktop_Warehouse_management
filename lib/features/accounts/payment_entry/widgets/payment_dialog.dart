@@ -63,7 +63,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
     super.initState();
     voucherController.text = _generateVoucherNo();
     _loadParties();
-    print("Payment dialog");
+    debugPrint("Payment dialog");
   }
 
   String _generateVoucherNo() {
@@ -267,7 +267,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                                           items: (filter, _) => suppliers,
                                           itemAsString: (supplier) => supplier.name,
                                           compareFn: (item, selectedItem) =>
-                                              selectedItem != null && item.name == selectedItem.name,
+                                              item.name == selectedItem.name,
                                           popupProps: PopupProps.menu(
                                             showSearchBox: true,
                                             fit: FlexFit.loose,
@@ -330,7 +330,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                                           items: (filter, _) => customers,
                                           itemAsString: (customer) => customer.name,
                                           compareFn: (item, selectedItem) =>
-                                              item.id == selectedItem?.id,
+                                              item.id == selectedItem.id,
                                           popupProps: PopupProps.menu(
                                             showSearchBox: true,
                                             fit: FlexFit.loose,
@@ -562,7 +562,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
 
                                 Expanded(
                                   child: DropdownButtonFormField<PaymentMode>(
-                                    value: paymentMode,
+                                    initialValue: paymentMode,
                                     decoration: InputDecoration(
                                       labelText: "Payment Mode",
                                       border: OutlineInputBorder(
@@ -781,7 +781,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
               width: 20,
               height: 20,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.18),
+                color: Colors.white.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: isBusy

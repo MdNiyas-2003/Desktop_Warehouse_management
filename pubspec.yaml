@@ -48,6 +48,8 @@ dependencies:
   calendar_date_picker2: ^2.0.1
   dropdown_search: ^6.0.1
   flutter_spinkit: ^5.2.1
+  qr_flutter: ^4.1.0
+  universal_barcode_scanner: ^2.3.0
   
 dev_dependencies:
   flutter_test:

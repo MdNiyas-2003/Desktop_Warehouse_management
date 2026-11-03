@@ -11,17 +11,11 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: const BoxDecoration(
         color: headerBlue,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(6),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.point_of_sale,
-            color: blue,
-            size: 23,
-          ),
+          const Icon(Icons.point_of_sale, color: blue, size: 23),
           const SizedBox(width: 8),
           const Text(
             'Counter Billing',
@@ -125,11 +119,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                   },
                 ),
                 _space(7),
-                _fieldRow(
-                  Icons.person_outline,
-                  'Given By',
-                  givenByController,
-                ),
+                _fieldRow(Icons.person_outline, 'Given By', givenByController),
               ],
             ),
           ),
@@ -146,11 +136,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                         Icons.description_outlined,
                         'Type',
                         invoiceType,
-                        [
-                          'Sale Invoice',
-                          'Return Invoice',
-                          'Quotation',
-                        ],
+                        ['Sale Invoice', 'Return Invoice', 'Quotation'],
                         (value) {
                           if (value != null) {
                             setState(() => invoiceType = value);
@@ -211,11 +197,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
             width: 112,
             child: Row(
               children: [
-                Icon(
-                  icon,
-                  size: 17,
-                  color: navy,
-                ),
+                Icon(icon, size: 17, color: navy),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
@@ -243,15 +225,11 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                   FocusScope.of(context).unfocus();
                 }
               },
-              textInputAction:
-                  nextFocus != null ? TextInputAction.next : TextInputAction.done,
-              style: const TextStyle(
-                fontSize: 12.5,
-                color: Color(0xFF17213B),
-              ),
-              decoration: _inputDecoration(
-                search: search,
-              ),
+              textInputAction: nextFocus != null
+                  ? TextInputAction.next
+                  : TextInputAction.done,
+              style: const TextStyle(fontSize: 12.5, color: Color(0xFF17213B)),
+              decoration: _inputDecoration(search: search),
             ),
           ),
         ],
@@ -259,45 +237,27 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
     );
   }
 
-  InputDecoration _inputDecoration({
-    bool search = false,
-  }) {
+  InputDecoration _inputDecoration({bool search = false}) {
     return InputDecoration(
       isDense: true,
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 6,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       suffixIcon: search
-          ? const Icon(
-              Icons.search,
-              size: 18,
-              color: navy,
-            )
+          ? const Icon(Icons.search, size: 18, color: navy)
           : null,
-      suffixIconConstraints: const BoxConstraints(
-        minWidth: 30,
-        minHeight: 28,
-      ),
+      suffixIconConstraints: const BoxConstraints(minWidth: 30, minHeight: 28),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(4),
-        borderSide: const BorderSide(
-          color: border,
-        ),
+        borderSide: const BorderSide(color: border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(4),
-        borderSide: const BorderSide(
-          color: border,
-        ),
+        borderSide: const BorderSide(color: border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(4),
-        borderSide: const BorderSide(
-          color: blue,
-        ),
+        borderSide: const BorderSide(color: blue),
       ),
     );
   }
@@ -325,14 +285,13 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
             style: MenuStyle(
               backgroundColor: const WidgetStatePropertyAll(Colors.white),
               elevation: const WidgetStatePropertyAll(6),
-              surfaceTintColor:
-                  const WidgetStatePropertyAll(Colors.transparent),
+              surfaceTintColor: const WidgetStatePropertyAll(
+                Colors.transparent,
+              ),
               padding: const WidgetStatePropertyAll(
                 EdgeInsets.symmetric(vertical: 4),
               ),
-              minimumSize: WidgetStatePropertyAll(
-                Size(fieldWidth, 0),
-              ),
+              minimumSize: WidgetStatePropertyAll(Size(fieldWidth, 0)),
             ),
             menuChildren: values.map((item) {
               return SizedBox(
@@ -518,11 +477,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
             width: 112,
             child: Row(
               children: [
-                Icon(
-                  Icons.calendar_month_outlined,
-                  size: 17,
-                  color: navy,
-                ),
+                Icon(Icons.calendar_month_outlined, size: 17, color: navy),
                 SizedBox(width: 7),
                 Text(
                   'Date',
@@ -538,9 +493,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
           Expanded(
             child: TextField(
               readOnly: true,
-              controller: TextEditingController(
-                text: '24-Oct-2020',
-              ),
+              controller: TextEditingController(text: '24-Oct-2020'),
               style: const TextStyle(fontSize: 12.5),
               decoration: _inputDecoration().copyWith(
                 suffixIcon: const Icon(
@@ -563,9 +516,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         color: const Color(0xFFF1F8FF),
-        border: Border.all(
-          color: const Color(0xFFD7E8F8),
-        ),
+        border: Border.all(color: const Color(0xFFD7E8F8)),
         borderRadius: BorderRadius.circular(5),
       ),
       child: Column(
@@ -642,8 +593,8 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       child: Table(
         columnWidths: const {
           0: FixedColumnWidth(80),
-          1: FixedColumnWidth(120),
-          2: FlexColumnWidth(2.0),
+          1: FixedColumnWidth(200),
+          2: FlexColumnWidth(1.7),
           3: FixedColumnWidth(70),
           4: FixedColumnWidth(110),
           5: FixedColumnWidth(120),
@@ -671,7 +622,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
     return Align(
       alignment: Alignment.center,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8,vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Text(
           text,
           style: const TextStyle(
@@ -702,8 +653,8 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       child: Table(
         columnWidths: const {
           0: FixedColumnWidth(80),
-          1: FixedColumnWidth(120),
-          2: FlexColumnWidth(2.0),
+          1: FixedColumnWidth(200),
+          2: FlexColumnWidth(1.7),
           3: FixedColumnWidth(70),
           4: FixedColumnWidth(110),
           5: FixedColumnWidth(120),
@@ -718,7 +669,9 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                 child: SizedBox(
                   height: 34,
                   child: TextField(
-                    controller: TextEditingController(text: '${items.length + 1}'),
+                    controller: TextEditingController(
+                      text: '${items.length + 1}',
+                    ),
                     style: const TextStyle(fontSize: 12.5),
                     textAlignVertical: TextAlignVertical.center,
                     decoration: _tableDecoration(),
@@ -729,15 +682,128 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                 padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                 child: SizedBox(
                   height: 34,
-                  child: TextField(
-                    controller: itemCodeController,
+                  child: RawAutocomplete<ItemModel>(
+                    textEditingController: itemCodeController,
                     focusNode: _itemCodeFocus,
-                    onSubmitted: (_) => FocusScope.of(context).requestFocus(_itemNameFocus),
-                    textInputAction: TextInputAction.next,
-                    style: const TextStyle(fontSize: 12.5),
-                    textAlignVertical: TextAlignVertical.center,
-                    onChanged: (_) => _calculateEntryAmount(),
-                    decoration: _tableDecoration(suffix: Icons.search),
+                    displayStringForOption: (item) => item.code,
+                    optionsBuilder: _searchCatalogItems,
+                    onSelected: _selectCatalogItem,
+                    optionsViewBuilder: (context, onSelected, options) {
+                      final matches = options.toList(growable: false);
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 8,
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            width: 360,
+                            constraints: const BoxConstraints(maxHeight: 240),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: border),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: matches.length,
+                              itemBuilder: (context, index) {
+                                final item = matches[index];
+                                final highlightedIndex =
+                                    AutocompleteHighlightedOption.of(context);
+                                final isHighlighted = highlightedIndex == index;
+                                return Material(
+                                  color: isHighlighted
+                                      ? const Color(0xFFEAF2FF)
+                                      : Colors.white,
+                                  child: InkWell(
+                                    onTap: () => onSelected(item),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 9,
+                                      ),
+                                      child: Text(
+                                        item.code,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: navy,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    fieldViewBuilder:
+                        (context, controller, focusNode, onFieldSubmitted) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            onSubmitted: (_) {
+                              onFieldSubmitted();
+                              FocusScope.of(
+                                context,
+                              ).requestFocus(_itemNameFocus);
+                            },
+                            textInputAction: TextInputAction.next,
+                            style: const TextStyle(fontSize: 12.5),
+                            textAlignVertical: TextAlignVertical.center,
+                            onChanged: (_) => _calculateEntryAmount(),
+                            decoration: _tableDecoration().copyWith(
+                              suffixIcon: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_isSearchingItems ||
+                                      _isResolvingScannedItem)
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                      ),
+                                      child: SizedBox(
+                                        width: 12,
+                                        height: 12,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                        ),
+                                      ),
+                                    )
+                                  else if (_itemSearchError != null)
+                                    Tooltip(
+                                      message: _itemSearchError!,
+                                      child: const Icon(
+                                        Icons.error_outline,
+                                        size: 16,
+                                        color: red,
+                                      ),
+                                    ),
+                                  IconButton(
+                                    tooltip: 'Scan item QR code',
+                                    onPressed: _isResolvingScannedItem
+                                        ? null
+                                        : _scanAndFetchItem,
+                                    padding: EdgeInsets.zero,
+                                    visualDensity: VisualDensity.compact,
+                                    constraints: const BoxConstraints.tightFor(
+                                      width: 30,
+                                      height: 30,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.qr_code_scanner,
+                                      size: 17,
+                                      color: navy,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
                   ),
                 ),
               ),
@@ -748,7 +814,8 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                   child: TextField(
                     controller: itemNameController,
                     focusNode: _itemNameFocus,
-                    onSubmitted: (_) => FocusScope.of(context).requestFocus(_qtyFocus),
+                    onSubmitted: (_) =>
+                        FocusScope.of(context).requestFocus(_qtyFocus),
                     textInputAction: TextInputAction.next,
                     style: const TextStyle(fontSize: 12.5),
                     textAlignVertical: TextAlignVertical.center,
@@ -763,7 +830,8 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                   child: TextField(
                     controller: qtyController,
                     focusNode: _qtyFocus,
-                    onSubmitted: (_) => FocusScope.of(context).requestFocus(_rateFocus),
+                    onSubmitted: (_) =>
+                        FocusScope.of(context).requestFocus(_rateFocus),
                     textInputAction: TextInputAction.next,
                     style: const TextStyle(fontSize: 12.5),
                     keyboardType: TextInputType.number,
@@ -781,7 +849,9 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                     controller: rateController,
                     focusNode: _rateFocus,
                     style: const TextStyle(fontSize: 12.5),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     textAlignVertical: TextAlignVertical.center,
                     onChanged: (_) => _calculateEntryAmount(),
                     onSubmitted: (_) => _addItem(),
@@ -842,22 +912,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
     );
   }
 
-  Widget _tableInput(Widget child, double flex) {
-    return Expanded(
-      flex: (flex * 100).round(),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        child: SizedBox(
-          height: 34,
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  InputDecoration _tableDecoration({
-    IconData? suffix,
-  }) {
+  InputDecoration _tableDecoration({IconData? suffix}) {
     const radius = BorderRadius.all(Radius.circular(4));
     const normal = BorderSide(color: border, width: 1);
     const focused = BorderSide(color: blue, width: 1);
@@ -870,10 +925,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       suffixIcon: suffix == null
           ? null
           : const Icon(Icons.search, size: 16, color: navy),
-      suffixIconConstraints: const BoxConstraints(
-        minWidth: 25,
-        minHeight: 25,
-      ),
+      suffixIconConstraints: const BoxConstraints(minWidth: 25, minHeight: 25),
       border: const OutlineInputBorder(
         borderRadius: radius,
         borderSide: normal,
@@ -921,8 +973,8 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       child: Table(
         columnWidths: const {
           0: FixedColumnWidth(80),
-          1: FixedColumnWidth(120),
-          2: FlexColumnWidth(2.0),
+          1: FixedColumnWidth(200),
+          2: FlexColumnWidth(1.7),
           3: FixedColumnWidth(70),
           4: FixedColumnWidth(110),
           5: FixedColumnWidth(120),
@@ -966,10 +1018,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
         value,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontSize: 12,
-          color: Color(0xFF17213B),
-        ),
+        style: const TextStyle(fontSize: 12, color: Color(0xFF17213B)),
       ),
     );
   }
@@ -980,24 +1029,13 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
 
   Widget _bottomSection() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        14,
-        8,
-        14,
-        7,
-      ),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 5,
-            child: _paymentCard(),
-          ),
+          Expanded(flex: 5, child: _paymentCard()),
           const SizedBox(width: 20),
-          Expanded(
-            flex: 5,
-            child: _summary(),
-          ),
+          Expanded(flex: 5, child: _summary()),
         ],
       ),
     );
@@ -1017,11 +1055,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
         children: [
           const Row(
             children: [
-              Icon(
-                Icons.payments_outlined,
-                color: navy,
-                size: 22,
-              ),
+              Icon(Icons.payments_outlined, color: navy, size: 22),
               SizedBox(width: 8),
               Text(
                 'Payment Details',
@@ -1091,8 +1125,8 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
               focusNode: controller == receivedController
                   ? _receivedFocusNode
                   : controller == cardController
-                      ? _cardFocusNode
-                      : _upiFocusNode,
+                  ? _cardFocusNode
+                  : _upiFocusNode,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
@@ -1117,10 +1151,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       isDense: true,
       filled: true,
       fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 9,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(5),
         borderSide: const BorderSide(color: border),
@@ -1230,7 +1261,10 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
           SizedBox(
@@ -1238,7 +1272,10 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -1255,10 +1292,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
           const Expanded(
             child: Text(
               '(-) Discount :',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
             ),
           ),
           SizedBox(
@@ -1269,7 +1303,10 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
                 value: discountEnabled,
                 activeColor: blue,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                visualDensity: const VisualDensity(
+                  horizontal: -4,
+                  vertical: -4,
+                ),
                 onChanged: (value) {
                   setState(() => discountEnabled = value ?? false);
                 },
@@ -1288,7 +1325,9 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
               textInputAction: TextInputAction.next,
               onChanged: (_) => setState(() {}),
               textAlign: TextAlign.center,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               style: const TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
@@ -1343,12 +1382,7 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       child: Row(
         children: [
           const Spacer(),
-          _footerButton(
-            Icons.save_outlined,
-            'Save (F8)',
-            blue,
-            Colors.white,
-          ),
+          _footerButton(Icons.save_outlined, 'Save (F8)', blue, Colors.white),
           const SizedBox(width: 6),
           _footerButton(
             Icons.delete_outline,
@@ -1408,30 +1442,19 @@ mixin _CounterBillingWidgets on _CounterBillingScreenStateBase {
       height: 40,
       child: ElevatedButton.icon(
         onPressed: onPressed ?? () {},
-        icon: Icon(
-          icon,
-          size: 18,
-        ),
+        icon: Icon(icon, size: 18),
         label: Text(
           text,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-          ),
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: foreground,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 7),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(4),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         ),
       ),
     );
   }
-
-
-
 }

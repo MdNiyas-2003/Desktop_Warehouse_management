@@ -238,7 +238,7 @@ class _LineChartPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [color.withOpacity(0.26), color.withOpacity(0.0)],
+        colors: [color.withValues(alpha: 0.26), color.withValues(alpha: 0.0)],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     final linePaint = Paint()
@@ -334,7 +334,7 @@ class _BarChartPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [color.withOpacity(0.95), color.withOpacity(0.45)],
+            colors: [color.withValues(alpha: 0.95), color.withValues(alpha: 0.45)],
           ).createShader(rect.outerRect),
       );
     }

@@ -1,6 +1,8 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:desktop/features/warehouse/models/item_model.dart';
+import 'package:desktop/features/warehouse/services/item_service.dart';
+import 'package:universal_barcode_scanner/universal_barcode_scanner.dart';
 
 part 'counter_billing_widgets.dart';
 part 'counter_billing_methods.dart';
@@ -25,49 +27,32 @@ class CounterBillingScreen extends StatefulWidget {
   State<CounterBillingScreen> createState() => _CounterBillingScreenState();
 }
 
-abstract class _CounterBillingScreenStateBase extends State<CounterBillingScreen> {
+abstract class _CounterBillingScreenStateBase
+    extends State<CounterBillingScreen> {
   // ============================================================
   // COLORS
   // ============================================================
 
-
-
-
-
-
-
-
   // ============================================================
   // BILL FIELDS
   // ============================================================
-  final mobileController =
-      TextEditingController(text: '9829500343');
-  final customerController =
-      TextEditingController(text: 'RISHI ACHARYA');
-  final addressController =
-      TextEditingController(text: 'BIKANER');
+  final mobileController = TextEditingController(text: '9829500343');
+  final customerController = TextEditingController(text: 'RISHI ACHARYA');
+  final addressController = TextEditingController(text: 'BIKANER');
 
-  final billNoController =
-      TextEditingController(text: '2');
+  final billNoController = TextEditingController(text: '2');
 
+  final discountController = TextEditingController(text: '10');
 
-  final discountController =
-      TextEditingController(text: '10');
-
-
-  final receivedController =
-      TextEditingController();
-  final cardController =
-      TextEditingController();
-  final upiController =
-      TextEditingController();
+  final receivedController = TextEditingController();
+  final cardController = TextEditingController();
+  final upiController = TextEditingController();
   final FocusNode _cardFocusNode = FocusNode();
   final FocusNode _upiFocusNode = FocusNode();
   final FocusNode _receivedFocusNode = FocusNode();
   final FocusNode _discountFocusNode = FocusNode();
 
-  final givenByController =
-      TextEditingController();
+  final givenByController = TextEditingController();
 
   // ============================================================
   // ITEM ENTRY FIELDS
@@ -85,6 +70,11 @@ abstract class _CounterBillingScreenStateBase extends State<CounterBillingScreen
   final FocusNode _itemNameFocus = FocusNode();
   final FocusNode _qtyFocus = FocusNode();
   final FocusNode _rateFocus = FocusNode();
+  final ItemService _itemService = ItemService();
+  bool _isSearchingItems = false;
+  bool _isResolvingScannedItem = false;
+  String? _itemSearchError;
+  int _itemSearchRequest = 0;
 
   // ============================================================
   // OPTIONS
@@ -103,43 +93,7 @@ abstract class _CounterBillingScreenStateBase extends State<CounterBillingScreen
 
   final ScrollController _itemsScrollController = ScrollController();
 
-  final List<Map<String, dynamic>> items = [
-    {
-      'code': '434',
-      'name': 'PATANJALI COW GHEE 500ML',
-      'qty': 1,
-      'unit': 'PCS',
-      'rate': 286.15,
-    },
-    {
-      'code': '435',
-      'name': 'PATANJALI COW GHEE 200ML',
-      'qty': 1,
-      'unit': 'PCS',
-      'rate': 121.25,
-    },
-    {
-      'code': '464',
-      'name': 'Appy FIZZ 1000ml',
-      'qty': 1,
-      'unit': 'PCS',
-      'rate': 56.26,
-    },
-    {
-      'code': '322',
-      'name': 'PATANJALI DW BAR 175G',
-      'qty': 1,
-      'unit': 'PCS',
-      'rate': 9.70,
-    },
-    {
-      'code': '466',
-      'name': 'Appy FIZZ 600ml',
-      'qty': 1,
-      'unit': 'PCS',
-      'rate': 32.01,
-    },
-  ];
+  final List<Map<String, dynamic>> items = [];
 
   // ============================================================
   // CALCULATIONS
@@ -150,8 +104,7 @@ abstract class _CounterBillingScreenStateBase extends State<CounterBillingScreen
       0,
       (sum, item) =>
           sum +
-          ((item['qty'] as num).toDouble() *
-              (item['rate'] as num).toDouble()),
+          ((item['qty'] as num).toDouble() * (item['rate'] as num).toDouble()),
     );
   }
 
@@ -160,16 +113,13 @@ abstract class _CounterBillingScreenStateBase extends State<CounterBillingScreen
     return subtotal * 0.05;
   }
 
-
   double get discount {
     if (!discountEnabled) return 0;
 
-    final percentage =
-        double.tryParse(discountController.text) ?? 0;
+    final percentage = double.tryParse(discountController.text) ?? 0;
 
     return subtotal * percentage / 100;
   }
-
 
   double get amountBeforeRoundOff {
     return subtotal + gst - discount;
@@ -197,20 +147,111 @@ abstract class _CounterBillingScreenStateBase extends State<CounterBillingScreen
     return cash + card + upi;
   }
 
-
   double get balanceAmount {
     return received - total;
   }
 
   String money(double value) => value.toStringAsFixed(2);
 
+  Future<Iterable<ItemModel>> _searchCatalogItems(
+    TextEditingValue value,
+  ) async {
+    final search = value.text.trim();
+    final request = ++_itemSearchRequest;
+    if (search.isEmpty) {
+      if (_isSearchingItems || _itemSearchError != null) {
+        setState(() {
+          _isSearchingItems = false;
+          _itemSearchError = null;
+        });
+      }
+      return const [];
+    }
+
+    setState(() {
+      _isSearchingItems = true;
+      _itemSearchError = null;
+    });
+    try {
+      return await _itemService.getItems(search: search);
+    } catch (error) {
+      if (mounted && request == _itemSearchRequest) {
+        setState(() => _itemSearchError = error.toString());
+      }
+      return const [];
+    } finally {
+      if (mounted && request == _itemSearchRequest) {
+        setState(() => _isSearchingItems = false);
+      }
+    }
+  }
+
+  void _selectCatalogItem(ItemModel item) {
+    setState(() {
+      itemCodeController.text = item.code;
+      itemNameController.text = item.name;
+      rateController.text = item.rate.toStringAsFixed(2);
+      unit = item.unit;
+      _itemSearchError = null;
+    });
+    _calculateEntryAmount();
+  }
+
+  Future<void> _scanAndFetchItem() async {
+    String? scannedCode;
+    try {
+      scannedCode = await UniversalBarcodeScanner.scan(
+        context,
+        scanFormat: ScanFormat.onlyQrCode,
+        scanWindow: ScanWindow.square,
+      );
+    } on ScannerException catch (error) {
+      if (mounted) {
+        _showMessage('Unable to scan item QR code: ${error.code.name}');
+      }
+      return;
+    } catch (error) {
+      if (mounted) _showMessage('Unable to scan item QR code: $error');
+      return;
+    }
+
+    final code = scannedCode?.trim();
+    if (!mounted || code == null || code.isEmpty) return;
+
+    setState(() => _isResolvingScannedItem = true);
+    try {
+      final matches = await _itemService.getItems(search: code);
+      ItemModel? item;
+      for (final match in matches) {
+        if (match.code.trim().toLowerCase() == code.toLowerCase()) {
+          item = match;
+          break;
+        }
+      }
+
+      if (!mounted) return;
+      if (item == null) {
+        _showMessage('No item found for QR code "$code"');
+        return;
+      }
+
+      _selectCatalogItem(item);
+      FocusScope.of(context).requestFocus(_qtyFocus);
+    } catch (error) {
+      if (mounted) _showMessage('Unable to fetch scanned item: $error');
+    } finally {
+      if (mounted) setState(() => _isResolvingScannedItem = false);
+    }
+  }
+
   void _calculateEntryAmount();
+  void _showMessage(String message);
   void _addItem();
   void _resetBill();
-
 }
 
-class _CounterBillingScreenState extends _CounterBillingScreenStateBase with _CounterBillingWidgets, _CounterBillingMethods {
+class _CounterBillingScreenState extends _CounterBillingScreenStateBase
+    with _CounterBillingWidgets, _CounterBillingMethods {
   // ============================================================
   // BUILD
   // ============================================================
@@ -255,9 +296,7 @@ class _CounterBillingScreenState extends _CounterBillingScreenStateBase with _Co
                       child: Column(
                         children: [
                           _customerSection(),
-                          Expanded(
-                            child: _itemsTable(),
-                          ),
+                          Expanded(child: _itemsTable()),
                           _bottomSection(),
                         ],
                       ),

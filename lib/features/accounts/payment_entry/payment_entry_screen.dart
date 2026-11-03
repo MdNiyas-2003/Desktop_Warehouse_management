@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+// ignore: library_prefixes
 import 'package:pdf/pdf.dart' as pdfLib;
 import 'package:pdf/widgets.dart' as pw;
 
@@ -352,7 +353,7 @@ class _PaymentTableState extends State<_PaymentTable> {
                     ),
                     const SizedBox(height: 20),
                     DropdownButtonFormField<String>(
-                      value: filterMode,
+                      initialValue: filterMode,
                       decoration: InputDecoration(
                         labelText: 'Payment Mode',
                         labelStyle: GoogleFonts.poppins(color: Colors.blueGrey.shade600),
@@ -576,6 +577,7 @@ class _PaymentTableState extends State<_PaymentTable> {
             ),
           ),
           pw.SizedBox(height: 18),
+          // ignore: deprecated_member_use
           pw.Table.fromTextArray(
             headers: tableHeaders,
             data: tableData,
@@ -626,7 +628,7 @@ class _PaymentTableState extends State<_PaymentTable> {
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(.06),
+            color: Colors.black.withValues(alpha: .06),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -944,7 +946,7 @@ class _PaymentTableState extends State<_PaymentTable> {
           width: compact ? 18 : 22,
           height: compact ? 18 : 22,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(.18),
+            color: Colors.white.withValues(alpha: .18),
             borderRadius: BorderRadius.circular(5),
           ),
           child: Icon(Icons.add, size: compact ? 14 : 15, color: Colors.white),

@@ -66,9 +66,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
       for (final row in customersRaw) {
         final customer = _CustomerProfile.fromMap(row);
 
-        print("RAW: $row");
-        print("companyName: '${customer.companyName}'");
-        print("Customer Count: ${customersRaw.length}");
+        debugPrint("RAW: $row");
+        debugPrint("companyName: '${customer.companyName}'");
+        debugPrint("Customer Count: ${customersRaw.length}");
         if (customer.companyName.trim().isNotEmpty) {
           customers.add(customer);
         }
@@ -110,6 +110,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     final catalog = catalogMap.values.toList();
 
     final draft = await showDialog<_CreateOrderDraft>(
+      // ignore: use_build_context_synchronously
       context: context,
       barrierDismissible: false,
       builder: (context) => _CreateOrderDialog(
@@ -934,6 +935,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                               .toList();
 
                           final result = await showDialog(
+                            // ignore: use_build_context_synchronously
                             context: context,
                             builder: (_) => _DraftOrdersDialog(drafts: drafts),
                           );
@@ -1147,7 +1149,7 @@ class _DraftOrdersDialog extends StatelessWidget {
           border: Border.all(color: const Color(0xffE5E7EB)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(.08),
+              color: Colors.black.withValues(alpha: .08),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -1515,6 +1517,7 @@ class _DraftCardState extends State<_DraftCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
 
+        // ignore: deprecated_member_use
         transform: Matrix4.identity()..translate(0.0, hover ? -2.0 : 0.0),
 
         decoration: BoxDecoration(
@@ -1522,7 +1525,7 @@ class _DraftCardState extends State<_DraftCard> {
 
           boxShadow: [
             BoxShadow(
-              color: hover ? Colors.blue.withOpacity(.08) : Colors.transparent,
+              color: hover ? Colors.blue.withValues(alpha: .08) : Colors.transparent,
 
               blurRadius: 12,
 
@@ -1565,6 +1568,7 @@ class _HoverDraftCardState extends State<_HoverDraftCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
 
+        // ignore: deprecated_member_use
         transform: Matrix4.identity()..translate(0.0, hovering ? -5.0 : 0.0),
 
         decoration: BoxDecoration(
@@ -1573,8 +1577,8 @@ class _HoverDraftCardState extends State<_HoverDraftCard> {
           boxShadow: [
             BoxShadow(
               color: hovering
-                  ? Colors.blue.withOpacity(.14)
-                  : Colors.black.withOpacity(.05),
+                  ? Colors.blue.withValues(alpha: .14)
+                  : Colors.black.withValues(alpha: .05),
 
               blurRadius: hovering ? 35 : 18,
 
@@ -2275,14 +2279,14 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
     try {
       final data = await _categoryService.getCategories();
 
-      print("Category Count: ${data.length}");
-      print(data);
+      debugPrint("Category Count: ${data.length}");
+      debugPrint(data as String?);
 
       setState(() {
         _categories = data.map((e) => e.name).toList();
       });
     } catch (e) {
-      print(e);
+      debugPrint(e as String?);
     }
   }
 
@@ -2506,7 +2510,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                                   child: DropdownButtonFormField<String>(
                                     isExpanded: true,
                                     itemHeight: 56,
-                                    value: _orderType,
+                                    initialValue: _orderType,
                                     decoration: premiumDecoration(
                                       label: 'Order Type *',
                                     ),
@@ -2527,7 +2531,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
-                                    value: _salesRegion,
+                                    initialValue: _salesRegion,
                                     decoration: premiumDecoration(
                                       label: 'Sales Region',
                                     ),
@@ -2548,7 +2552,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
-                                    value: _priority,
+                                    initialValue: _priority,
                                     decoration: premiumDecoration(
                                       label: 'Priority',
                                     ),
@@ -2673,12 +2677,12 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                             const SizedBox(height: 8),
                             Builder(
                               builder: (context) {
-                                print(
+                                debugPrint(
                                   "Widget Customer Length: ${widget.customers.length}",
                                 );
 
                                 for (final c in widget.customers) {
-                                  print(
+                                  debugPrint(
                                     "Customer => ${c.id} | ${c.companyName}",
                                   );
                                 }
@@ -2691,7 +2695,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
                                 Expanded(
                                   child:
                                       DropdownButtonFormField<_CustomerProfile>(
-                                        value: _selectedCustomer,
+                                        initialValue: _selectedCustomer,
                                         decoration: premiumDecoration(
                                           label: 'Customer *',
                                         ),
@@ -3104,7 +3108,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: paymentStatus,
+                initialValue: paymentStatus,
                 decoration: const InputDecoration(
                   labelText: "Payment Status",
                   isDense: true,
@@ -3121,7 +3125,7 @@ class _CreateOrderDialogState extends State<_CreateOrderDialog> {
             const SizedBox(width: 10),
             Expanded(
               child: DropdownButtonFormField<String>(
-                value: paymentMethod,
+                initialValue: paymentMethod,
                 decoration: const InputDecoration(
                   labelText: "Payment Method",
                   isDense: true,
@@ -3678,7 +3682,7 @@ class _ItemPickerCard extends StatelessWidget {
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: selectedCategory,
+                  initialValue: selectedCategory,
                   decoration: const InputDecoration(
                     labelText: 'Category',
                     isDense: true,
@@ -3692,7 +3696,7 @@ class _ItemPickerCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButtonFormField<_CatalogItem>(
-                  value: selectedItem,
+                  initialValue: selectedItem,
                   decoration: const InputDecoration(
                     labelText: 'Item Name',
                     isDense: true,
@@ -4512,8 +4516,9 @@ String _invoiceDate(DateTime date) =>
 String _amountInWords(double amount) {
   final value = amount.round();
   if (value == 0) return 'Zero';
-  if (value >= 10000000)
+  if (value >= 10000000) {
     return '${(value / 10000000).toStringAsFixed(2)} crore';
+  }
   if (value >= 100000) return '${(value / 100000).toStringAsFixed(2)} lakh';
   if (value >= 1000) return '${(value / 1000).toStringAsFixed(2)} thousand';
   return value.toString();
@@ -5252,8 +5257,9 @@ String _normalizeStatus(String raw) {
   if (value.contains('pending') || value.contains('new')) return 'Pending';
   if (value.contains('process') || value.contains('approve')) return 'Approved';
   if (value.contains('ready')) return 'Ready to Dispatch';
-  if (value.contains('transit') || value.contains('dispatch'))
+  if (value.contains('transit') || value.contains('dispatch')) {
     return 'In Transit';
+  }
   if (value.contains('deliver')) return 'Delivered';
   if (value.contains('reject')) return 'Rejected';
   return 'Pending';

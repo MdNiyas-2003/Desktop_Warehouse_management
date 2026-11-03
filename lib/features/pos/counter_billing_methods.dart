@@ -72,7 +72,6 @@ mixin _CounterBillingMethods on _CounterBillingScreenStateBase {
     );
   }
 
-  @override
   void _saveBill() {
     _showMessage('Bill saved successfully');
   }
@@ -81,45 +80,7 @@ mixin _CounterBillingMethods on _CounterBillingScreenStateBase {
   @override
   void _resetBill() {
     setState(() {
-      items
-        ..clear()
-        ..addAll([
-          {
-            'code': '434',
-            'name': 'PATANJALI COW GHEE 500ML',
-            'qty': 1,
-            'unit': 'PCS',
-            'rate': 286.15,
-          },
-          {
-            'code': '435',
-            'name': 'PATANJALI COW GHEE 200ML',
-            'qty': 1,
-            'unit': 'PCS',
-            'rate': 121.25,
-          },
-          {
-            'code': '464',
-            'name': 'Appy FIZZ 1000ml',
-            'qty': 1,
-            'unit': 'PCS',
-            'rate': 56.26,
-          },
-          {
-            'code': '322',
-            'name': 'PATANJALI DW BAR 175G',
-            'qty': 1,
-            'unit': 'PCS',
-            'rate': 9.70,
-          },
-          {
-            'code': '466',
-            'name': 'Appy FIZZ 600ml',
-            'qty': 1,
-            'unit': 'PCS',
-            'rate': 32.01,
-          },
-        ]);
+      items.clear();
 
       mobileController.text = '9829500343';
       customerController.text = 'RISHI ACHARYA';

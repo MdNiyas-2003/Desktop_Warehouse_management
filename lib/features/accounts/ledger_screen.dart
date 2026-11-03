@@ -8,6 +8,7 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+// ignore: library_prefixes
 import 'package:pdf/pdf.dart' as pdfLib;
 import 'package:pdf/widgets.dart' as pw;
 
@@ -670,6 +671,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
                     headingRowHeight: 52,
+                    // ignore: deprecated_member_use
                     dataRowHeight: 56,
                     showBottomBorder: true,
                     headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.text),
@@ -974,12 +976,12 @@ class _SummaryMetric extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),

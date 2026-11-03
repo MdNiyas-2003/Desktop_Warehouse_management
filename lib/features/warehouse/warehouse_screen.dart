@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:desktop/core/widgets/app_snackbar.dart';
 import 'package:desktop/features/warehouse/models/category_model.dart';
 import 'package:desktop/features/warehouse/models/item_model.dart';
@@ -7,10 +8,14 @@ import 'package:desktop/features/warehouse/services/item_service.dart';
 import 'package:desktop/features/warehouse/services/supplier_service.dart';
 import 'package:desktop/features/warehouse/widgets/erp_search_dropdown.dart';
 import 'package:flutter/material.dart';
-
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/network/backend_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/premium_widgets.dart';
+
+const double _warehouseFieldHeight = 32;
 
 class WarehouseScreen extends StatefulWidget {
   const WarehouseScreen({super.key});
@@ -22,16 +27,26 @@ class WarehouseScreen extends StatefulWidget {
 class _WarehouseScreenState extends State<WarehouseScreen> {
   int _selectedTab = 0;
   bool _isSubmitting = false;
+  bool _isAddingItem = false;
+  bool _isLoadingSuppliers = false;
+  bool _isLoadingCategories = false;
+  bool _isLoadingItems = false;
+  bool _isNewItem = false;
+  String? _suppliersError;
+  String? _categoriesError;
+  String? _itemsError;
+  String? _selectedSupplierId;
+  int? _selectedItemId;
   final _api = BackendApi();
   final List<_ReceiveItemRowData> _items = [];
   final _supplierController = TextEditingController();
   final _supplierCodeController = TextEditingController();
   final _invoiceNoController = TextEditingController();
-  final _invoiceDateController = TextEditingController(text: '15/07/2026');
+  final _invoiceDateController = TextEditingController();
   final _referenceController = TextEditingController();
   final _poNumberController = TextEditingController();
   final _deliveryNoteController = TextEditingController();
-  final _receivingDateController = TextEditingController(text: '15/07/2026');
+  final _receivingDateController = TextEditingController();
   final _receivedByController = TextEditingController();
   final _warehouseController = TextEditingController();
   final _rackBinController = TextEditingController();
@@ -69,11 +84,9 @@ class _WarehouseScreenState extends State<WarehouseScreen> {
   final CategoryService _categoryService = CategoryService();
   final SupplierService _supplierService = SupplierService();
   final ItemService _itemService = ItemService();
-int _dropdownRefreshKey = 0;
   List<CategoryModel> _categories = [];
   List<ItemModel> _itemsList = [];
   List<SupplierModel> _suppliers = [];
-  SupplierModel? _selectedSupplier;
 
   @override
   void initState() {
@@ -84,16 +97,24 @@ int _dropdownRefreshKey = 0;
   }
 
   Future<void> _loadSuppliers() async {
+    setState(() {
+      _isLoadingSuppliers = true;
+      _suppliersError = null;
+    });
     try {
       final data = await _supplierService.getSuppliers();
-      print("Supplier Count: ${data.length}");
+      if (!mounted) return;
       setState(() => _suppliers = data);
     } catch (e) {
-      print('Error loading suppliers: $e');
+      if (!mounted) return;
+      setState(() => _suppliersError = e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoadingSuppliers = false);
     }
   }
 
   Future<void> _fetchSupplierDetails(SupplierModel supplier) async {
+    _selectedSupplierId = supplier.id;
     _supplierController.text = supplier.name;
     _supplierCodeController.text = supplier.code;
     _supplierPhoneController.text = supplier.phone;
@@ -105,7 +126,6 @@ int _dropdownRefreshKey = 0;
   }
 
   Future<void> _onSupplierSelected(SupplierModel supplier) async {
-    _selectedSupplier = supplier;
     await _fetchSupplierDetails(supplier);
     setState(() {
       _items.clear();
@@ -117,63 +137,133 @@ int _dropdownRefreshKey = 0;
       _rateController.text = '0';
       _discountController.text = '0';
       _taxController.text = '0';
+      _isNewItem = false;
+      _selectedItemId = null;
       _billAmountController.text = '0.00';
       _taxAmountController.text = '0.00';
       _grandTotalController.text = '0.00';
     });
   }
 
-  void _addItem() {
-    print("Item Name: ${_itemNameController.text}");
-    print("Category: ${_categoryController.text}");
+  Future<void> _addItem() async {
+    final itemName = _itemNameController.text.trim();
+    final categoryName = _categoryController.text.trim();
+    var itemCode = _itemCodeController.text.trim();
+    final unit = _unitController.text.trim();
+    final qty = double.tryParse(_qtyController.text.trim());
+    final rate = double.tryParse(_rateController.text.trim());
+    final discount = double.tryParse(_discountController.text.trim());
+    final tax = double.tryParse(_taxController.text.trim());
 
-    if (_itemNameController.text.trim().isEmpty) {
-      print("Item name is empty");
+    final missingFields = <String>[
+      if (itemName.isEmpty) 'item name',
+      if (categoryName.isEmpty) 'category',
+      if (unit.isEmpty) 'unit',
+      if (!_isNewItem && itemCode.isEmpty) 'item code',
+    ];
+    if (missingFields.isNotEmpty) {
+      AppSnackBar.warning(
+        message: 'Enter or select ${missingFields.join(', ')}.',
+      );
+      return;
+    }
+    if (qty == null || !qty.isFinite || qty <= 0) {
+      AppSnackBar.warning(message: 'Quantity must be greater than zero.');
+      return;
+    }
+    if (rate == null ||
+        !rate.isFinite ||
+        rate < 0 ||
+        discount == null ||
+        !discount.isFinite ||
+        discount < 0 ||
+        tax == null ||
+        !tax.isFinite ||
+        tax < 0) {
+      AppSnackBar.warning(
+        message: 'Enter valid non-negative rate, discount, and GST.',
+      );
       return;
     }
 
-    setState(() {
-      _items.add(
-        _ReceiveItemRowData(
-          category: _categoryController.text.trim(),
-          itemName: _itemNameController.text.trim(),
-          itemCode: _itemCodeController.text.trim(),
-          hsnSac: '',
-          qty: double.tryParse(_qtyController.text) ?? 0,
-          unit: _unitController.text.trim(),
-          rate: double.tryParse(_rateController.text) ?? 0,
-          discount: double.tryParse(_discountController.text) ?? 0,
-          tax: double.tryParse(_taxController.text) ?? 0,
-        ),
-      );
+    if (_isAddingItem) return;
+    setState(() => _isAddingItem = true);
+    try {
+      if (_isNewItem) {
+        final category = _categories.cast<CategoryModel?>().firstWhere(
+          (entry) =>
+              entry?.name.trim().toLowerCase() == categoryName.toLowerCase(),
+          orElse: () => null,
+        );
+        if (category == null || category.id <= 0) {
+          AppSnackBar.warning(
+            message: 'Select or create a category before adding this item.',
+          );
+          return;
+        }
+        final createdItem = await _itemService.addItem(
+          categoryId: category.id,
+          itemName: itemName,
+          unit: unit,
+          rate: rate,
+          gst: tax,
+          stock: 0,
+        );
+        if (!mounted) return;
+        itemCode = createdItem.code;
+        setState(() {
+          _itemsList = [..._itemsList, createdItem];
+          _isNewItem = false;
+          _selectedItemId = createdItem.id;
+          _itemCodeController.text = createdItem.code;
+        });
+      }
 
-      print("Items Count: ${_items.length}");
-      
-      // Clear form fields after adding
-      _categoryController.clear();
-      _itemNameController.clear();
-      _itemCodeController.clear();
-      _unitController.clear();
-      _qtyController.text = '1';
-      _rateController.text = '0';
-      _discountController.text = '0';
-      _taxController.text = '0';
-      
-      // Auto-update financial totals
-      _billAmountController.text = _itemsSubTotal.toStringAsFixed(2);
-      _taxAmountController.text = _itemsTaxTotal.toStringAsFixed(2);
-      _grandTotalController.text = (_itemsSubTotal + _itemsTaxTotal).toStringAsFixed(2);
-    });
+      setState(() {
+        _items.add(
+          _ReceiveItemRowData(
+            category: categoryName,
+            itemName: itemName,
+            itemCode: itemCode,
+            itemId: _selectedItemId,
+            hsnSac: '',
+            qty: qty,
+            unit: unit,
+            rate: rate,
+            discount: discount,
+            tax: tax,
+          ),
+        );
+        _categoryController.clear();
+        _itemNameController.clear();
+        _itemCodeController.clear();
+        _unitController.text = 'PCS';
+        _qtyController.text = '1';
+        _rateController.text = '0';
+        _discountController.text = '0';
+        _taxController.text = '0';
+        _selectedItemId = null;
+        _billAmountController.text = _itemsSubTotal.toStringAsFixed(2);
+        _taxAmountController.text = _itemsTaxTotal.toStringAsFixed(2);
+        _grandTotalController.text = (_itemsSubTotal + _itemsTaxTotal)
+            .toStringAsFixed(2);
+      });
+    } catch (e) {
+      if (mounted) AppSnackBar.failed(message: 'Unable to add item: $e');
+    } finally {
+      if (mounted) setState(() => _isAddingItem = false);
+    }
   }
 
   void _removeItemRow(int index) {
     setState(() {
       _items.removeAt(index);
-      
+
       // Auto-update financial totals after removal
       _billAmountController.text = _itemsSubTotal.toStringAsFixed(2);
       _taxAmountController.text = _itemsTaxTotal.toStringAsFixed(2);
-      _grandTotalController.text = (_itemsSubTotal + _itemsTaxTotal).toStringAsFixed(2);
+      _grandTotalController.text = (_itemsSubTotal + _itemsTaxTotal)
+          .toStringAsFixed(2);
     });
   }
 
@@ -209,6 +299,12 @@ int _dropdownRefreshKey = 0;
       AppSnackBar.warning(message: 'Supplier and Invoice No. are required.');
       return;
     }
+    if (_selectedSupplierId == null) {
+      AppSnackBar.warning(
+        message: 'Select or save a supplier before receiving stock.',
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
     try {
@@ -217,24 +313,43 @@ int _dropdownRefreshKey = 0;
       final grandTotal = subTotal + taxTotal;
 
       await _api.createWarehouseReceipt({
+        'supplierId': _selectedSupplierId,
         'supplier': _supplierController.text.trim(),
         'invoiceNo': _invoiceNoController.text.trim(),
         'invoiceDate': _invoiceDateController.text.trim(),
-        'referencePoNo': _referenceController.text.trim(),
-        'billAmount':
-            double.tryParse(_billAmountController.text.trim()) ?? subTotal,
-        'taxAmount':
-            double.tryParse(_taxAmountController.text.trim()) ?? taxTotal,
+        'deliveryNote': _deliveryNoteController.text.trim(),
+        'receivingDate': _receivingDateController.text.trim(),
+        'receivedBy': _receivedByController.text.trim(),
+        'referencePoNo': _poNumberController.text.trim().isNotEmpty
+            ? _poNumberController.text.trim()
+            : _referenceController.text.trim(),
+        'discountAmount':
+            double.tryParse(_discountAmountController.text.trim()) ?? 0,
+        'freight': double.tryParse(_freightController.text.trim()) ?? 0,
+        'otherCharges':
+            double.tryParse(_otherChargesController.text.trim()) ?? 0,
+        'roundOff': double.tryParse(_roundOffController.text.trim()) ?? 0,
+        'paidAmount': double.tryParse(_paidAmountController.text.trim()) ?? 0,
+        'paymentTerms': _paymentTermsController.text.trim(),
+        'paymentMode': _paymentModeController.text.trim(),
+        'dueDate': _dueDateController.text.trim(),
+        'referenceNumber': _referenceNumberController.text.trim(),
+        'warehouseName': _warehouseController.text.trim(),
+        'rackBin': _rackBinController.text.trim(),
+        'receivingLocation': _receivingLocationController.text.trim(),
         'notes': _notesController.text.trim(),
         'supplierContact': _contactPersonController.text.trim(),
         'supplierPhone': _supplierPhoneController.text.trim(),
         'supplierGstin': _supplierGstinController.text.trim(),
         'supplierAddress': _supplierAddressController.text.trim(),
+        'supplierLocation': _supplierLocationController.text.trim(),
         'transportName': _transportController.text.trim(),
         'vehicleNo': _vehicleController.text.trim(),
         'subTotal': subTotal,
         'taxTotal': taxTotal,
         'grandTotal': grandTotal,
+        'billAmount': subTotal,
+        'taxAmount': taxTotal,
         'status': 'Received',
         'items': _items
             .map(
@@ -242,6 +357,7 @@ int _dropdownRefreshKey = 0;
                 'category': e.category,
                 'itemName': e.itemName,
                 'itemCode': _safeInventoryCode(e),
+                'itemId': e.itemId,
                 'hsnSac': e.hsnSac,
                 'qty': e.qty,
                 'unit': e.unit,
@@ -254,7 +370,7 @@ int _dropdownRefreshKey = 0;
       });
       if (!mounted) return;
 
-    _clearForm();
+      _clearForm();
 
       AppSnackBar.success(
         message: 'Invoice saved to PostgreSQL and stock quantity updated.',
@@ -269,62 +385,65 @@ int _dropdownRefreshKey = 0;
     }
   }
 
- void _clearForm() {
-  _supplierController.clear();
-  _supplierCodeController.clear();
-  _invoiceNoController.clear();
-  _invoiceDateController.text = '';
-  _referenceController.clear();
-  _poNumberController.clear();
-  _deliveryNoteController.clear();
-  _receivingDateController.text = '';
-  _receivedByController.clear();
+  void _clearForm() {
+    _selectedSupplierId = null;
+    _isNewItem = false;
+    _selectedItemId = null;
+    _supplierController.clear();
+    _supplierCodeController.clear();
+    _invoiceNoController.clear();
+    _invoiceDateController.text = '';
+    _referenceController.clear();
+    _poNumberController.clear();
+    _deliveryNoteController.clear();
+    _receivingDateController.text = '';
+    _receivedByController.clear();
 
-  _warehouseController.clear();
-  _rackBinController.clear();
-  _receivingLocationController.clear();
+    _warehouseController.clear();
+    _rackBinController.clear();
+    _receivingLocationController.clear();
 
-  _billAmountController.text = '0.00';
-  _taxAmountController.text = '0.00';
-  _discountAmountController.text = '0.00';
-  _freightController.text = '0.00';
-  _otherChargesController.text = '0.00';
-  _roundOffController.text = '0.00';
-  _grandTotalController.text = '0.00';
-  _paidAmountController.text = '0.00';
-  _balanceAmountController.text = '0.00';
+    _billAmountController.text = '0.00';
+    _taxAmountController.text = '0.00';
+    _discountAmountController.text = '0.00';
+    _freightController.text = '0.00';
+    _otherChargesController.text = '0.00';
+    _roundOffController.text = '0.00';
+    _grandTotalController.text = '0.00';
+    _paidAmountController.text = '0.00';
+    _balanceAmountController.text = '0.00';
 
-  _paymentTermsController.clear();
-  _paymentModeController.clear();
-  _dueDateController.clear();
-  _referenceNumberController.clear();
+    _paymentTermsController.clear();
+    _paymentModeController.clear();
+    _dueDateController.clear();
+    _referenceNumberController.clear();
 
-  _notesController.clear();
+    _notesController.clear();
 
-  _contactPersonController.clear();
-  _supplierPhoneController.clear();
-  _supplierGstinController.clear();
-  _supplierAddressController.clear();
-  _supplierLocationController.clear();
-  _outstandingBalanceController.text = '0.00';
+    _contactPersonController.clear();
+    _supplierPhoneController.clear();
+    _supplierGstinController.clear();
+    _supplierAddressController.clear();
+    _supplierLocationController.clear();
+    _outstandingBalanceController.text = '0.00';
 
-  _transportController.clear();
-  _vehicleController.clear();
+    _transportController.clear();
+    _vehicleController.clear();
 
-  _categoryController.clear();
-  _itemNameController.clear();
-  _itemCodeController.clear();
-  _qtyController.text = '1';
-  _unitController.clear();
-  _rateController.text = '0';
-  _discountController.text = '0';
-  _taxController.text = '0';
+    _categoryController.clear();
+    _itemNameController.clear();
+    _itemCodeController.clear();
+    _qtyController.text = '1';
+    _unitController.clear();
+    _rateController.text = '0';
+    _discountController.text = '0';
+    _taxController.text = '0';
 
-  setState(() {
-    _items.clear();
-    _dropdownRefreshKey++;
-  });
-}
+    setState(() {
+      _items.clear();
+    });
+  }
+
   Future<void> _saveDraft() async {
     AppSnackBar.success(message: 'Draft saved locally.');
   }
@@ -381,135 +500,448 @@ int _dropdownRefreshKey = 0;
   }
 
   Future<void> _loadCategories() async {
+    setState(() {
+      _isLoadingCategories = true;
+      _categoriesError = null;
+    });
     try {
       final data = await _categoryService.getCategories();
-
-      print("Category Count: ${data.length}");
-      print(data);
-
+      if (!mounted) return;
       setState(() {
         _categories = data;
       });
     } catch (e) {
-      print(e);
+      if (!mounted) return;
+      setState(() => _categoriesError = e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoadingCategories = false);
     }
   }
 
   Future<void> _loadItems({int? categoryId}) async {
+    setState(() {
+      _isLoadingItems = true;
+      _itemsError = null;
+    });
     try {
       final data = await _itemService.getItems(categoryId: categoryId);
-
-      print("Item Count : ${data.length}");
-
+      if (!mounted) return;
       setState(() {
         _itemsList = data;
       });
     } catch (e) {
-      print('Error loading items: $e');
+      if (!mounted) return;
+      setState(() => _itemsError = e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoadingItems = false);
     }
   }
 
   void _onCategorySelected(CategoryModel category) {
+    setState(() {
+      _isNewItem = false;
+      _selectedItemId = null;
+      _itemNameController.clear();
+      _itemCodeController.clear();
+      _unitController.clear();
+      _rateController.text = '0';
+      _taxController.text = '0';
+    });
     _loadItems(categoryId: category.id);
-    _itemNameController.clear();
-    _itemCodeController.clear();
-    _unitController.clear();
-    _rateController.text = '0';
-    _taxController.text = '0';
+  }
+
+  Future<CategoryModel> _createCategory(String name) async {
+    final category = await _categoryService.addCategory(name: name.trim());
+    if (!mounted) return category;
+    setState(() {
+      _categories = [..._categories, category];
+      _categoryController.text = category.name;
+      _categoriesError = null;
+    });
+    return category;
+  }
+
+  void _startNewItem(String name) {
+    setState(() {
+      _isNewItem = true;
+      _selectedItemId = null;
+      _itemNameController.text = name.trim();
+      _itemCodeController.clear();
+      _unitController.text = 'PCS';
+      _rateController.text = '0';
+      _taxController.text = '0';
+    });
+  }
+
+  void _onItemSelected(ItemModel item) {
+    final category = _categories
+        .where((entry) => entry.id == item.categoryId)
+        .firstOrNull;
+    setState(() {
+      if (category != null) {
+        _categoryController.text = category.name;
+      } else if (item.categoryName != null) {
+        _categoryController.text = item.categoryName!;
+      }
+      _itemNameController.text = item.name;
+      _itemCodeController.text = item.code;
+      _unitController.text = item.unit;
+      _rateController.text = item.rate.toString();
+      _taxController.text = item.gst.toString();
+      _selectedItemId = item.id;
+      _isNewItem = false;
+    });
+  }
+
+  Future<void> _showSelectedItemDetails() async {
+    final selected = _itemsList
+        .where((item) => item.id == _selectedItemId)
+        .firstOrNull;
+    if (selected == null) {
+      AppSnackBar.warning(message: 'Select an existing item to view its QR.');
+      return;
+    }
+    await _showItemDetailsDialog(selected);
+  }
+
+  Future<void> _showItemDetailsDialog(ItemModel item) async {
+    final categoryName =
+        item.categoryName ??
+        _categories
+            .where((category) => category.id == item.categoryId)
+            .map((category) => category.name)
+            .firstOrNull ??
+        '—';
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Item Details & QR Code'),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              QrImageView(
+                data: item.code,
+                version: QrVersions.auto,
+                size: 190,
+                backgroundColor: Colors.white,
+                errorCorrectionLevel: QrErrorCorrectLevel.M,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                item.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _ItemDetailLine(label: 'Item Code', value: item.code),
+              _ItemDetailLine(label: 'Item ID', value: item.id.toString()),
+              _ItemDetailLine(label: 'Category', value: categoryName),
+              _ItemDetailLine(
+                label: 'Unit / Rate',
+                value: '${item.unit} / ${item.rate.toStringAsFixed(2)}',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+          FilledButton.icon(
+            onPressed: () => _printItemQr(item),
+            icon: const Icon(Icons.print_outlined),
+            label: const Text('Print / Save PDF'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _printItemQr(ItemModel item) async {
+    try {
+      final qrBytes = await QrPainter(
+        data: item.code,
+        version: QrVersions.auto,
+        errorCorrectionLevel: QrErrorCorrectLevel.M,
+      ).toImageData(512, format: ui.ImageByteFormat.png);
+      if (qrBytes == null) {
+        throw StateError('Unable to render the item QR code.');
+      }
+      final pdf = pw.Document();
+      final qrImage = pw.MemoryImage(qrBytes.buffer.asUint8List());
+      pdf.addPage(
+        pw.Page(
+          build: (context) => pw.Center(
+            child: pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                pw.Text(
+                  item.name,
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Image(qrImage, width: 220, height: 220),
+                pw.SizedBox(height: 8),
+                pw.Text('Item Code: ${item.code}'),
+                pw.Text('Item ID: ${item.id}'),
+              ],
+            ),
+          ),
+        ),
+      );
+      await Printing.layoutPdf(
+        name: 'item-${item.code}.pdf',
+        onLayout: (_) => pdf.save(),
+      );
+    } catch (error) {
+      if (mounted) {
+        AppSnackBar.failed(message: 'Unable to print item QR: $error');
+      }
+    }
+  }
+
+  Future<void> _addNewSupplier(String name) async {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: name);
+    final codeController = TextEditingController();
+    final phoneController = TextEditingController();
+    final gstinController = TextEditingController();
+    final addressController = TextEditingController();
+    final locationController = TextEditingController();
+    var saving = false;
+    String? dialogError;
+
+    final supplier = await showDialog<SupplierModel>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add New Supplier'),
+          content: SizedBox(
+            width: 460,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _DialogTextField(
+                      label: 'Supplier Name *',
+                      controller: nameController,
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                          ? 'Supplier name is required'
+                          : null,
+                    ),
+                    _DialogTextField(
+                      label: 'Supplier Code',
+                      controller: codeController,
+                    ),
+                    _DialogTextField(
+                      label: 'Contact Number',
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    _DialogTextField(
+                      label: 'GSTIN',
+                      controller: gstinController,
+                    ),
+                    _DialogTextField(
+                      label: 'Address',
+                      controller: addressController,
+                    ),
+                    _DialogTextField(
+                      label: 'Location',
+                      controller: locationController,
+                    ),
+                    if (dialogError != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            dialogError!,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() {
+                        saving = true;
+                        dialogError = null;
+                      });
+                      try {
+                        final existing = await _supplierService.getSuppliers(
+                          search: nameController.text.trim(),
+                        );
+                        if (!dialogContext.mounted) return;
+                        final duplicate = existing.where(
+                          (entry) =>
+                              entry.name.trim().toLowerCase() ==
+                              nameController.text.trim().toLowerCase(),
+                        );
+                        if (duplicate.isNotEmpty) {
+                          Navigator.pop(dialogContext, duplicate.first);
+                          return;
+                        }
+                        final created = await _supplierService.addSupplier(
+                          name: nameController.text,
+                          code: codeController.text,
+                          phone: phoneController.text,
+                          gstin: gstinController.text,
+                          address: addressController.text,
+                          location: locationController.text,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext, created);
+                        }
+                      } catch (e) {
+                        if (dialogContext.mounted) {
+                          setDialogState(() {
+                            saving = false;
+                            dialogError = e.toString();
+                          });
+                        }
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save Supplier'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    nameController.dispose();
+    codeController.dispose();
+    phoneController.dispose();
+    gstinController.dispose();
+    addressController.dispose();
+    locationController.dispose();
+
+    if (supplier != null && mounted) {
+      setState(() {
+        if (!_suppliers.any((entry) => entry.id == supplier.id)) {
+          _suppliers = [..._suppliers, supplier];
+        }
+      });
+      await _onSupplierSelected(supplier);
+      AppSnackBar.success(message: 'Supplier saved and selected.');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      key: const ValueKey('warehouse'),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          PremiumCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                PillTabBar(
-                  labels: const [
-                    'Receive Items',
-                    // 'Allocate Stock',
-                    // 'Dispatch',
-                    // 'Delivery Status',
-                  ],
-                  selectedIndex: _selectedTab,
-                  onSelected: (value) =>
-                      setState(() => _selectedTab = value),
-                ),
-                const SizedBox(height: 12),
-                if (_selectedTab == 0)
-                  _ReceiveItemsPanel(
-                        itemsList: _itemsList,
-                        categories: _categories,
-                        suppliers: _suppliers,
-                        items: _items,
-                        onAddItem: _addItem,
-                        onRemoveRow: _removeItemRow,
-                        onSubmit: _submitReceiveToStore,
-                        onClear: _clearForm,
-                        onSaveDraft: _saveDraft,
-                        onPrint: _printReceipt,
-                        onFetchSupplierDetails: _onSupplierSelected,
-                        onCategorySelected: _onCategorySelected,
-                        isSubmitting: _isSubmitting,
-                        supplierController: _supplierController,
-                        supplierCodeController: _supplierCodeController,
-                        invoiceNoController: _invoiceNoController,
-                        invoiceDateController: _invoiceDateController,
-                        referenceController: _referenceController,
-                        poNumberController: _poNumberController,
-                        deliveryNoteController: _deliveryNoteController,
-                        receivingDateController: _receivingDateController,
-                        receivedByController: _receivedByController,
-                        warehouseController: _warehouseController,
-                        rackBinController: _rackBinController,
-                        receivingLocationController:
-                            _receivingLocationController,
-                        billAmountController: _billAmountController,
-                        taxAmountController: _taxAmountController,
-                        discountAmountController: _discountAmountController,
-                        freightController: _freightController,
-                        otherChargesController: _otherChargesController,
-                        roundOffController: _roundOffController,
-                        grandTotalController: _grandTotalController,
-                        paidAmountController: _paidAmountController,
-                        balanceAmountController: _balanceAmountController,
-                        paymentTermsController: _paymentTermsController,
-                        paymentModeController: _paymentModeController,
-                        dueDateController: _dueDateController,
-                        referenceNumberController: _referenceNumberController,
-                        notesController: _notesController,
-                        contactPersonController: _contactPersonController,
-                        supplierPhoneController: _supplierPhoneController,
-                        supplierGstinController: _supplierGstinController,
-                        supplierAddressController: _supplierAddressController,
-                        supplierLocationController: _supplierLocationController,
-                        outstandingBalanceController:
-                            _outstandingBalanceController,
-                        transportController: _transportController,
-                        vehicleController: _vehicleController,
-                        categoryController: _categoryController,
-                        itemNameController: _itemNameController,
-                        itemCodeController: _itemCodeController,
-                        qtyController: _qtyController,
-                        unitController: _unitController,
-                        rateController: _rateController,
-                        discountController: _discountController,
-                        taxController: _taxController,
-                      )
-                  ],
-                ),
-              ),
-            ],
-      ));
+    return Scaffold(
+      backgroundColor: const Color(0xFFF4F7FB),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: _selectedTab == 0
+              ? _ReceiveItemsPanel(
+                  itemsList: _itemsList,
+                  categories: _categories,
+                  suppliers: _suppliers,
+                  items: _items,
+                  onAddItem: _addItem,
+                  isAddingItem: _isAddingItem,
+                  onRemoveRow: _removeItemRow,
+                  onSubmit: _submitReceiveToStore,
+                  onClear: _clearForm,
+                  onSaveDraft: _saveDraft,
+                  onPrint: _printReceipt,
+                  onFetchSupplierDetails: _onSupplierSelected,
+                  onAddNewSupplier: (name) => _addNewSupplier(name),
+                  onCategorySelected: _onCategorySelected,
+                  onCreateCategory: _createCategory,
+                  onNewItem: _startNewItem,
+                  onItemSelected: _onItemSelected,
+                  onShowSelectedItemDetails: _showSelectedItemDetails,
+                  isNewItem: _isNewItem,
+                  isLoadingSuppliers: _isLoadingSuppliers,
+                  suppliersError: _suppliersError,
+                  isLoadingCategories: _isLoadingCategories,
+                  categoriesError: _categoriesError,
+                  isLoadingItems: _isLoadingItems,
+                  itemsError: _itemsError,
+                  isSubmitting: _isSubmitting,
+                  supplierController: _supplierController,
+                  invoiceNoController: _invoiceNoController,
+                  invoiceDateController: _invoiceDateController,
+                  referenceController: _referenceController,
+                  poNumberController: _poNumberController,
+                  deliveryNoteController: _deliveryNoteController,
+                  receivingDateController: _receivingDateController,
+                  receivedByController: _receivedByController,
+                  warehouseController: _warehouseController,
+                  rackBinController: _rackBinController,
+                  receivingLocationController: _receivingLocationController,
+                  billAmountController: _billAmountController,
+                  taxAmountController: _taxAmountController,
+                  discountAmountController: _discountAmountController,
+                  freightController: _freightController,
+                  otherChargesController: _otherChargesController,
+                  roundOffController: _roundOffController,
+                  grandTotalController: _grandTotalController,
+                  paidAmountController: _paidAmountController,
+                  balanceAmountController: _balanceAmountController,
+                  paymentTermsController: _paymentTermsController,
+                  paymentModeController: _paymentModeController,
+                  dueDateController: _dueDateController,
+                  referenceNumberController: _referenceNumberController,
+                  notesController: _notesController,
+                  contactPersonController: _contactPersonController,
+                  supplierPhoneController: _supplierPhoneController,
+                  supplierGstinController: _supplierGstinController,
+                  supplierAddressController: _supplierAddressController,
+                  supplierLocationController: _supplierLocationController,
+                  outstandingBalanceController: _outstandingBalanceController,
+                  transportController: _transportController,
+                  vehicleController: _vehicleController,
+                  categoryController: _categoryController,
+                  itemNameController: _itemNameController,
+                  itemCodeController: _itemCodeController,
+                  qtyController: _qtyController,
+                  unitController: _unitController,
+                  rateController: _rateController,
+                  discountController: _discountController,
+                  taxController: _taxController,
+                )
+              : const SizedBox.shrink(),
+        ),
+      ),
+    );
   }
 }
 
+// ignore: unused_element
 class _DispatchStatus extends StatelessWidget {
   const _DispatchStatus(this.label, this.color);
 
@@ -520,6 +952,7 @@ class _DispatchStatus extends StatelessWidget {
   Widget build(BuildContext context) => StatusBadge(label: label, color: color);
 }
 
+// ignore: unused_element
 class _RowActions extends StatelessWidget {
   const _RowActions();
 
@@ -541,16 +974,28 @@ class _ReceiveItemsPanel extends StatelessWidget {
     required this.suppliers,
     required this.items,
     required this.onAddItem,
+    required this.isAddingItem,
     required this.onRemoveRow,
     required this.onSubmit,
     required this.onClear,
     required this.onSaveDraft,
     required this.onPrint,
     required this.onFetchSupplierDetails,
+    required this.onAddNewSupplier,
     required this.onCategorySelected,
+    required this.onCreateCategory,
+    required this.onNewItem,
+    required this.onItemSelected,
+    required this.onShowSelectedItemDetails,
+    required this.isNewItem,
+    required this.isLoadingSuppliers,
+    required this.suppliersError,
+    required this.isLoadingCategories,
+    required this.categoriesError,
+    required this.isLoadingItems,
+    required this.itemsError,
     required this.isSubmitting,
     required this.supplierController,
-    required this.supplierCodeController,
     required this.invoiceNoController,
     required this.invoiceDateController,
     required this.referenceController,
@@ -596,18 +1041,30 @@ class _ReceiveItemsPanel extends StatelessWidget {
 
   final List<_ReceiveItemRowData> items;
   final VoidCallback onAddItem;
+  final bool isAddingItem;
   final ValueChanged<int> onRemoveRow;
   final Future<void> Function() onSubmit;
   final VoidCallback onClear;
   final Future<void> Function() onSaveDraft;
   final VoidCallback onPrint;
   final Function(SupplierModel) onFetchSupplierDetails;
+  final ValueChanged<String> onAddNewSupplier;
   final ValueChanged<CategoryModel> onCategorySelected;
+  final Future<CategoryModel> Function(String) onCreateCategory;
+  final ValueChanged<String> onNewItem;
+  final ValueChanged<ItemModel> onItemSelected;
+  final VoidCallback onShowSelectedItemDetails;
+  final bool isNewItem;
+  final bool isLoadingSuppliers;
+  final String? suppliersError;
+  final bool isLoadingCategories;
+  final String? categoriesError;
+  final bool isLoadingItems;
+  final String? itemsError;
   final bool isSubmitting;
   final List<SupplierModel> suppliers;
   final List<CategoryModel> categories;
   final TextEditingController supplierController;
-  final TextEditingController supplierCodeController;
   final TextEditingController invoiceNoController;
   final TextEditingController invoiceDateController;
   final TextEditingController referenceController;
@@ -651,496 +1108,519 @@ class _ReceiveItemsPanel extends StatelessWidget {
   final List<ItemModel> itemsList;
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Card 1: Supply Receipt Form (Supplier, Invoice, Warehouse Details)
-          _FormSectionCard(
+    return Column(
+      children: [
+        Expanded(
+          flex: 28,
+          child: _FormSectionCard(
             title: 'Supply Receipt Form',
             icon: Icons.receipt_long_rounded,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _SectionHeading('Supplier Information'),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: _SupplierDropdownCompact(
-  controller: supplierController,
-  suppliers: suppliers,
-  onSelected: onFetchSupplierDetails,
-),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Supplier Code',
-                        hint: 'Code',
-                        controller: supplierCodeController,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Supplier Location',
-                        hint: 'Location',
-                        controller: supplierLocationController,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Outstanding Balance',
-                        hint: '0.00',
-                        controller: outstandingBalanceController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionHeading('Supplier Information'),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SupplierDropdownCompact(
+                                controller: supplierController,
+                                suppliers: suppliers,
+                                onSelected: onFetchSupplierDetails,
+                                onAddNew: onAddNewSupplier,
+                                isLoading: isLoadingSuppliers,
+                                errorMessage: suppliersError,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _CompactInput(
+                                label: 'Outstanding Balance',
+                                hint: '0.00',
+                                controller: outstandingBalanceController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                        const SizedBox(height: 4),
+                        _CompactThreeFieldRow(
+                          first: _CompactInput(
+                            label: 'Supplier Location',
+                            hint: 'Location',
+                            controller: supplierLocationController,
+                          ),
+                          second: _CompactInput(
+                            label: 'Contact Number',
+                            hint: 'Phone',
+                            controller: supplierPhoneController,
+                            keyboardType: TextInputType.phone,
+                          ),
+                          third: _CompactInput(
+                            label: 'GSTIN',
+                            hint: 'GSTIN',
+                            controller: supplierGstinController,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'GSTIN',
-                        hint: 'GSTIN',
-                        controller: supplierGstinController,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Contact Number',
-                        hint: 'Phone',
-                        controller: supplierPhoneController,
-                        keyboardType: TextInputType.phone,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-                _SectionHeading('Invoice Details'),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Invoice Number',
-                        hint: 'INV-001',
-                        controller: invoiceNoController,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Invoice Date',
-                        hint: '15/07/2026',
-                        controller: invoiceDateController,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'PO Number',
-                        hint: 'PO-001',
-                        controller: poNumberController,
-                      ),
-                    ),
-                  ],
+                const VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Color(0xFFD4DEE8),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Delivery Note',
-                        hint: 'DN-001',
-                        controller: deliveryNoteController,
-                      ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const _SectionHeading('Invoice Details'),
+                        const SizedBox(height: 3),
+                        _CompactThreeFieldRow(
+                          first: _CompactInput(
+                            label: 'Invoice Number',
+                            hint: 'INV-001',
+                            controller: invoiceNoController,
+                          ),
+                          second: _ReceiptDateInput(
+                            label: 'Invoice Date',
+                            controller: invoiceDateController,
+                          ),
+                          third: _CompactInput(
+                            label: 'PO Number',
+                            hint: 'PO-001',
+                            controller: poNumberController,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        _CompactThreeFieldRow(
+                          first: _CompactInput(
+                            label: 'Delivery Note',
+                            hint: 'DN-001',
+                            controller: deliveryNoteController,
+                          ),
+                          second: _ReceiptDateInput(
+                            label: 'Receiving Date',
+                            controller: receivingDateController,
+                          ),
+                          third: _CompactInput(
+                            label: 'Received By',
+                            hint: 'Name',
+                            controller: receivedByController,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Receiving Date',
-                        hint: '15/07/2026',
-                        controller: receivingDateController,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Received By',
-                        hint: 'Name',
-                        controller: receivedByController,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _SectionHeading('Warehouse Details'),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Warehouse',
-                        hint: 'Main Warehouse',
-                        controller: warehouseController,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Rack/Bin',
-                        hint: 'A-01',
-                        controller: rackBinController,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CompactInput(
-                        label: 'Receiving Location',
-                        hint: 'Receiving Point',
-                        controller: receivingLocationController,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          // Card 2: Items Section (Entry Form + Items Table)
-          _FormSectionCard(
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          flex: 36,
+          child: _FormSectionCard(
             title: 'Items',
             icon: Icons.inventory_2_outlined,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Item Entry Form
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFF),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Row 1: Category, Item Name, Item Code
-                     Row(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  children: [
-    Flexible(
-      flex: 1,
-      child: ErpSearchDropdown<CategoryModel>(
-
-        label: 'Category',
-        hint: 'Search Category',
-        items: categories,
-        selectedItem: categories
-            .where((e) => e.name == categoryController.text)
-            .cast<CategoryModel?>()
-            .firstOrNull,
-        itemText: (e) => e.name,
-        onSelected: (category) {
-          categoryController.text = category.name;
-          onCategorySelected(category);
-        },
-        onAddNew: (name) async {
-          try {
-            final newCategory = await CategoryService().addCategory(
-              name: name.trim(),
-            );
-            categoryController.text = newCategory.name;
-          } catch (e) {
-            debugPrint("Category Error: $e");
-          }
-        },
-      ),
-    ),
-
-    const SizedBox(width: 12),
-
-    Flexible(
-      flex: 1,
-      child: ErpSearchDropdown<ItemModel>(
-        label: 'Item Name',
-        hint: 'Search or Enter Item',
-        items: itemsList,
-        selectedItem: itemsList
-            .where((e) => e.name == itemNameController.text)
-            .cast<ItemModel?>()
-            .firstOrNull,
-        itemText: (e) => e.name,
-        onSelected: (item) {
-          itemNameController.text = item.name;
-          itemCodeController.text = item.code;
-          unitController.text = item.unit;
-          rateController.text = item.rate.toString();
-          taxController.text = item.gst.toString();
-        },
-        onAddNew: (name) {
-          itemNameController.text = name;
-          itemCodeController.text = name
-              .toLowerCase()
-              .replaceAll(RegExp(r'[^a-z0-9]+'), '_');
-        },
-      ),
-    ),
-
-    const SizedBox(width: 12),
-
-    Flexible(
-      flex: 1,
-      child: _CompactInput(
-        label: 'Item Code',
-        hint: 'Code',
-        controller: itemCodeController,
-      ),
-    ),
-  ],
-),
-                      const SizedBox(height: 10),
-                      // Row 2: Qty, Unit, Rate
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _CompactInput(
-                              label: 'Qty',
-                              hint: '1',
-                              controller: qtyController,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _CompactInput(
-                              label: 'Unit',
-                              hint: 'PCS',
-                              controller: unitController,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _CompactInput(
-                              label: 'Rate',
-                              hint: '0.00',
-                              controller: rateController,
-                            ),
-                          ),
-                        ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fields = <Widget>[
+                      ErpSearchDropdown<CategoryModel>(
+                        label: 'Category',
+                        hint: 'Search Category',
+                        controller: categoryController,
+                        items: categories,
+                        isLoading: isLoadingCategories,
+                        errorMessage: categoriesError,
+                        selectedItem: categories
+                            .where((e) => e.name == categoryController.text)
+                            .cast<CategoryModel?>()
+                            .firstOrNull,
+                        itemText: (e) => e.name,
+                        onSelected: (category) {
+                          categoryController.text = category.name;
+                          onCategorySelected(category);
+                        },
+                        onAddNew: (name) async {
+                          try {
+                            await onCreateCategory(name);
+                          } catch (e) {
+                            AppSnackBar.failed(
+                              message: 'Unable to add category: $e',
+                            );
+                          }
+                        },
                       ),
-                      const SizedBox(height: 10),
-                      // Row 3: GST %, Discount, Add Item button
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _CompactInput(
-                              label: 'GST %',
-                              hint: '0',
-                              controller: taxController,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _CompactInput(
-                              label: 'Discount',
-                              hint: '0',
-                              controller: discountController,
-                            ),
-                          ),
-                          const SizedBox(width: 175),
-                          Padding(
-                            padding: const EdgeInsets.only(top: 24),
-                            child: FilledButton.icon(
-                              onPressed: onAddItem,
-                              icon: const Icon(Icons.add_rounded, size: 16),
-                              label: const Text('Add Item'),
-                            ),
-                          ),
-                        ],
+                      ErpSearchDropdown<ItemModel>(
+                        label: 'Item Name',
+                        hint: 'Search or Enter Item',
+                        controller: itemNameController,
+                        items: itemsList,
+                        isLoading: isLoadingItems,
+                        errorMessage: itemsError,
+                        selectedItem: itemsList
+                            .where((e) => e.name == itemNameController.text)
+                            .cast<ItemModel?>()
+                            .firstOrNull,
+                        itemText: (e) => e.name,
+                        onSelected: onItemSelected,
+                        onAddNew: onNewItem,
                       ),
-                    ],
-                  ),
+                      _CompactInput(
+                        label: 'Item Code',
+                        hint: isNewItem ? 'Generated on save' : 'Code',
+                        controller: itemCodeController,
+                        readOnly: isNewItem,
+                        suffixIcon: isNewItem ? null : Icons.qr_code_2_rounded,
+                        onSuffixTap: onShowSelectedItemDetails,
+                      ),
+                      _CompactInput(
+                        label: 'Qty',
+                        hint: '1',
+                        controller: qtyController,
+                      ),
+                      _CompactInput(
+                        label: 'Unit',
+                        hint: 'PCS',
+                        controller: unitController,
+                      ),
+                      _CompactInput(
+                        label: 'Rate',
+                        hint: '0.00',
+                        controller: rateController,
+                      ),
+                      _CompactInput(
+                        label: 'GST %',
+                        hint: '0',
+                        controller: taxController,
+                      ),
+                      _CompactInput(
+                        label: 'Discount',
+                        hint: '0',
+                        controller: discountController,
+                      ),
+                    ];
+                    final addButton = SizedBox(
+                      height: 32,
+                      child: FilledButton.icon(
+                        onPressed: isAddingItem ? null : onAddItem,
+                        icon: isAddingItem
+                            ? const SizedBox(
+                                width: 13,
+                                height: 13,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.add_rounded, size: 15),
+                        label: Text(
+                          isAddingItem ? 'Adding' : 'Add Item',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          backgroundColor: const Color(0xFF1167E8),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    );
+
+                    if (constraints.maxWidth >= 1200) {
+                      const fieldFlex = [
+                        2.1,
+                        1.25,
+                        1.25,
+                        0.65,
+                        0.8,
+                        1,
+                        0.8,
+                        1.1,
+                      ];
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          for (var index = 0; index < fields.length; index++)
+                            Expanded(
+                              flex: (fieldFlex[index] * 100).round(),
+                              child: Padding(
+                                padding: EdgeInsets.only(right: 6),
+                                child: fields[index],
+                              ),
+                            ),
+                          addButton,
+                        ],
+                      );
+                    }
+
+                    final fieldWidth = (constraints.maxWidth - 8) / 2;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.end,
+                      children: [
+                        for (final field in fields)
+                          SizedBox(width: fieldWidth, child: field),
+                        addButton,
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 12),
-                // Items Table
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFF),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.border.withValues(alpha: 0.6),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFFD4DEE8)),
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      _CompactItemHeaderRow(),
-                      const Divider(height: 1),
-                      _ItemsEditorTable(items: items, onRemoveRow: onRemoveRow),
-                    ],
+                    child: Column(
+                      children: [
+                        const _CompactItemHeaderRow(),
+                        const Divider(height: 1, color: Color(0xFFD4DEE8)),
+                        Expanded(
+                          child: _ItemsEditorTable(
+                            items: items,
+                            onRemoveRow: onRemoveRow,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          // Card 3: Financial & Payment Details
-          _FormSectionCard(
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          flex: 36,
+          child: _FormSectionCard(
             title: 'Financial & Payment Details',
             icon: Icons.payments_outlined,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-_SectionHeading('Financial Details'),
-const SizedBox(height: 8),
-
-_CompactThreeFieldRow(
-  first: _CompactInput(
-    label: 'Subtotal',
-    hint: '0.00',
-    controller: billAmountController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-  second: _CompactInput(
-    label: 'Discount',
-    hint: '0.00',
-    controller: discountAmountController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-  third: _CompactInput(
-    label: 'Tax',
-    hint: '0.00',
-    controller: taxAmountController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-),
-
-const SizedBox(height: 8),
-
-_CompactThreeFieldRow(
-  first: _CompactInput(
-    label: 'Freight',
-    hint: '0.00',
-    controller: freightController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-  second: _CompactInput(
-    label: 'Other Charges',
-    hint: '0.00',
-    controller: otherChargesController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-  third: _CompactInput(
-    label: 'Round Off',
-    hint: '0.00',
-    controller: roundOffController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-),
-
-const SizedBox(height: 8),
-
-_CompactThreeFieldRow(
-  first: _CompactInput(
-    label: 'Grand Total',
-    hint: '0.00',
-    controller: grandTotalController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-  second: _CompactInput(
-    label: 'Paid Amount',
-    hint: '0.00',
-    controller: paidAmountController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-  third: _CompactInput(
-    label: 'Balance Amount',
-    hint: '0.00',
-    controller: balanceAmountController,
-    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-  ),
-),
-                const SizedBox(height: 12),
-              _SectionHeading('Payment Details'),
-const SizedBox(height: 8),
-
-_CompactFourFieldRow(
-  first: _CompactInput(
-    label: 'Payment Terms',
-    hint: 'Credit 30 Days',
-    controller: paymentTermsController,
-  ),
-  second: _CompactInput(
-    label: 'Payment Mode',
-    hint: 'Cash / Card / Bank',
-    controller: paymentModeController,
-  ),
-  third: _CompactInput(
-    label: 'Due Date',
-    hint: '15/07/2026',
-    controller: dueDateController,
-  ),
-  fourth: _CompactInput(
-    label: 'Reference Number',
-    hint: 'REF-001',
-    controller: referenceNumberController,
-  ),
-),
-                const SizedBox(height: 12),
-                _SectionHeading('Notes'),
-                const SizedBox(height: 8),
-                _CompactInput(
-                  label: 'Notes',
-                  hint: 'Enter notes here...',
-                  controller: notesController,
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                Expanded(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // _GlossyButton(
-                      //   label: 'Clear',
-                      //   icon: Icons.clear_all_rounded,
-                      //   onPressed: onClear,
-                      //   tone: _GlossyTone.silver,
-                      // ),
-                      // _GlossyButton(
-                      //   label: 'Save Draft',
-                      //   icon: Icons.save_alt_rounded,
-                      //   onPressed: () async => onSaveDraft(),
-                      //   tone: _GlossyTone.steel,
-                      // ),
-                      _GlossyButton(
-                        label: isSubmitting ? 'Receiving' : 'Receive Stock',
-                        icon: isSubmitting ? null : Icons.inventory_2_outlined,
-                        onPressed: isSubmitting ? null : () => onSubmit(),
-                        tone: _GlossyTone.navy,
-                        loading: isSubmitting,
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _SectionHeading('Financial Details'),
+                              const SizedBox(height: 3),
+                              _CompactThreeFieldRow(
+                                first: _CompactInput(
+                                  label: 'Subtotal',
+                                  hint: '0.00',
+                                  controller: billAmountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                                second: _CompactInput(
+                                  label: 'Discount',
+                                  hint: '0.00',
+                                  controller: discountAmountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                                third: _CompactInput(
+                                  label: 'Tax',
+                                  hint: '0.00',
+                                  controller: taxAmountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              _CompactThreeFieldRow(
+                                first: _CompactInput(
+                                  label: 'Freight',
+                                  hint: '0.00',
+                                  controller: freightController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                                second: _CompactInput(
+                                  label: 'Other Charges',
+                                  hint: '0.00',
+                                  controller: otherChargesController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                                third: _CompactInput(
+                                  label: 'Round Off',
+                                  hint: '0.00',
+                                  controller: roundOffController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              _CompactThreeFieldRow(
+                                first: _CompactInput(
+                                  label: 'Grand Total',
+                                  hint: '0.00',
+                                  controller: grandTotalController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                                second: _CompactInput(
+                                  label: 'Paid Amount',
+                                  hint: '0.00',
+                                  controller: paidAmountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                                third: _CompactInput(
+                                  label: 'Balance Amount',
+                                  hint: '0.00',
+                                  controller: balanceAmountController,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      _GlossyButton(
-                        label: 'Print',
-                        icon: Icons.print_outlined,
-                        onPressed: onPrint,
-                        tone: _GlossyTone.steel,
+                      const VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        color: Color(0xFFD4DEE8),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const _SectionHeading('Payment Details'),
+                              const SizedBox(height: 3),
+                              _CompactFourFieldRow(
+                                first: _CompactInput(
+                                  label: 'Payment Terms',
+                                  hint: 'Credit 30 Days',
+                                  controller: paymentTermsController,
+                                ),
+                                second: _CompactInput(
+                                  label: 'Payment Mode',
+                                  hint: 'Cash / Card / Bank',
+                                  controller: paymentModeController,
+                                ),
+                                third: _ReceiptDateInput(
+                                  label: 'Due Date',
+                                  controller: dueDateController,
+                                ),
+                                fourth: _CompactInput(
+                                  label: 'Reference Number',
+                                  hint: 'REF-001',
+                                  controller: referenceNumberController,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const _SectionHeading('Notes'),
+                              const SizedBox(height: 2),
+                              Expanded(
+                                child: _CompactInput(
+                                  label: '',
+                                  hint: 'Enter notes here...',
+                                  controller: notesController,
+                                  maxLines: 2,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Wrap(
+                                  spacing: 5,
+                                  runSpacing: 4,
+                                  alignment: WrapAlignment.end,
+                                  children: [
+                                    _GlossyButton(
+                                      label: 'Clear',
+                                      icon: Icons.close_rounded,
+                                      onPressed: onClear,
+                                      tone: _GlossyTone.clear,
+                                    ),
+                                    _GlossyButton(
+                                      label: 'Save as Draft',
+                                      icon: Icons.save_outlined,
+                                      onPressed: () async => onSaveDraft(),
+                                      tone: _GlossyTone.draft,
+                                    ),
+                                    _GlossyButton(
+                                      label: isSubmitting
+                                          ? 'Receiving'
+                                          : 'Receive Stock',
+                                      icon: isSubmitting
+                                          ? null
+                                          : Icons.inventory_2_outlined,
+                                      onPressed: isSubmitting
+                                          ? null
+                                          : () => onSubmit(),
+                                      tone: _GlossyTone.receive,
+                                      loading: isSubmitting,
+                                    ),
+                                    _GlossyButton(
+                                      label: 'Print',
+                                      icon: Icons.print_outlined,
+                                      onPressed: onPrint,
+                                      tone: _GlossyTone.print,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -1148,11 +1628,12 @@ _CompactFourFieldRow(
               ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
+
 class _CompactThreeFieldRow extends StatelessWidget {
   const _CompactThreeFieldRow({
     required this.first,
@@ -1177,6 +1658,7 @@ class _CompactThreeFieldRow extends StatelessWidget {
     );
   }
 }
+
 class _CompactFourFieldRow extends StatelessWidget {
   const _CompactFourFieldRow({
     required this.first,
@@ -1205,25 +1687,34 @@ class _CompactFourFieldRow extends StatelessWidget {
     );
   }
 }
+
 class _SectionHeading extends StatelessWidget {
-  const _SectionHeading(this.title, {super.key});
+  const _SectionHeading(this.title);
 
   final String title;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-        fontWeight: FontWeight.w700,
-        color: AppColors.primary,
-      ),
+    return Row(
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF082D68),
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(child: Divider(height: 1, color: Color(0xFFC7D3E2))),
+      ],
     );
   }
 }
 
+// ignore: unused_element
 class _CompactFieldRow extends StatelessWidget {
-  const _CompactFieldRow({required this.left, required this.right, super.key});
+  const _CompactFieldRow({required this.left, required this.right});
 
   final Widget left;
   final Widget right;
@@ -1248,7 +1739,9 @@ class _CompactInput extends StatelessWidget {
     this.controller,
     this.keyboardType,
     this.maxLines = 1,
-    super.key,
+    this.readOnly = false,
+    this.suffixIcon,
+    this.onSuffixTap,
   });
 
   final String label;
@@ -1256,45 +1749,80 @@ class _CompactInput extends StatelessWidget {
   final TextEditingController? controller;
   final TextInputType? keyboardType;
   final int maxLines;
+  final bool readOnly;
+  final IconData? suffixIcon;
+  final VoidCallback? onSuffixTap;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
+        if (label.isNotEmpty) ...[
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A2A3A),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
+          const SizedBox(height: 3),
+        ],
         SizedBox(
-          height: 42,
+          height: maxLines == 1 ? _warehouseFieldHeight : 56,
           child: TextField(
             controller: controller,
             keyboardType: keyboardType,
             maxLines: maxLines,
-            style: const TextStyle(fontSize: 12),
+            readOnly: readOnly,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF17213B)),
             decoration: InputDecoration(
               hintText: hint,
+              hintStyle: const TextStyle(
+                color: Color(0xFF8AA0B6),
+                fontWeight: FontWeight.w500,
+              ),
               isDense: true,
+              constraints: maxLines == 1
+                  ? const BoxConstraints.tightFor(height: _warehouseFieldHeight)
+                  : null,
               filled: true,
               fillColor: Colors.white,
+              suffixIcon: suffixIcon == null
+                  ? null
+                  : InkWell(
+                      onTap: onSuffixTap,
+                      child: SizedBox(
+                        width: 30,
+                        height: 26,
+                        child: Center(
+                          child: Icon(
+                            suffixIcon,
+                            size: 17,
+                            color: const Color(0xFF1167E8),
+                          ),
+                        ),
+                      ),
+                    ),
+              suffixIconConstraints: suffixIcon == null
+                  ? null
+                  : const BoxConstraints.tightFor(width: 30, height: 26),
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 10,
+                horizontal: 9,
+                vertical: 8,
               ),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
+              ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: Colors.grey.shade300, width: 0.8),
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: const BorderSide(color: Colors.blue, width: 1.0),
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFF1167E8)),
               ),
             ),
           ),
@@ -1304,8 +1832,189 @@ class _CompactInput extends StatelessWidget {
   }
 }
 
+class _ItemDetailLine extends StatelessWidget {
+  const _ItemDetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 82,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF68788A)),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF24364B),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReceiptDateInput extends StatelessWidget {
+  const _ReceiptDateInput({required this.label, required this.controller});
+
+  final String label;
+  final TextEditingController controller;
+
+  DateTime _initialDate() {
+    final parts = controller.text.split('/');
+    if (parts.length == 3) {
+      final day = int.tryParse(parts[0]);
+      final month = int.tryParse(parts[1]);
+      final year = int.tryParse(parts[2]);
+      if (day != null && month != null && year != null) {
+        final date = DateTime(year, month, day);
+        if (date.year == year && date.month == month && date.day == day) {
+          return date;
+        }
+      }
+    }
+    return DateTime.now();
+  }
+
+  Future<void> _pickDate(BuildContext context) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: _initialDate(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+            primary: const Color(0xFF1167E8),
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (selected == null) return;
+    controller.text =
+        '${selected.day.toString().padLeft(2, '0')}/${selected.month.toString().padLeft(2, '0')}/${selected.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF1A2A3A),
+          ),
+        ),
+        const SizedBox(height: 3),
+        SizedBox(
+          height: _warehouseFieldHeight,
+          child: TextField(
+            controller: controller,
+            readOnly: true,
+            onTap: () => _pickDate(context),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF17213B)),
+            decoration: InputDecoration(
+              hintText: 'Select date',
+              hintStyle: const TextStyle(color: Color(0xFF8AA0B6)),
+              isDense: true,
+              constraints: const BoxConstraints.tightFor(
+                height: _warehouseFieldHeight,
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 9,
+                vertical: 6,
+              ),
+              suffixIcon: InkWell(
+                onTap: () => _pickDate(context),
+                child: const SizedBox(
+                  width: 30,
+                  height: 26,
+                  child: Center(
+                    child: Icon(
+                      Icons.calendar_month_outlined,
+                      size: 16,
+                      color: Color(0xFF17213B),
+                    ),
+                  ),
+                ),
+              ),
+              suffixIconConstraints: const BoxConstraints.tightFor(
+                width: 30,
+                height: 26,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFF1167E8)),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DialogTextField extends StatelessWidget {
+  const _DialogTextField({
+    required this.label,
+    required this.controller,
+    this.validator,
+    this.keyboardType,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String? Function(String?)? validator;
+  final TextInputType? keyboardType;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextFormField(
+        controller: controller,
+        validator: validator,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+      ),
+    );
+  }
+}
+
 class _CompactItemHeaderRow extends StatelessWidget {
-  const _CompactItemHeaderRow({super.key});
+  const _CompactItemHeaderRow();
 
   @override
   Widget build(BuildContext context) {
@@ -1321,29 +2030,37 @@ class _CompactItemHeaderRow extends StatelessWidget {
       'Disc.',
       'Action',
     ];
-    return Row(
-      children: List.generate(headers.length, (index) {
-        final flex = [1, 2, 3, 2, 1, 1, 1, 1, 1, 1][index];
-        return Expanded(
-          flex: flex,
-          child: Text(
-            headers[index],
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: AppColors.text,
-              fontSize: 11,
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF124FAE),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: List.generate(headers.length, (index) {
+          final flex = [1, 2, 3, 2, 1, 1, 1, 1, 1, 1][index];
+          return Expanded(
+            flex: flex,
+            child: Text(
+              headers[index],
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                fontSize: 11,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-            overflow: TextOverflow.ellipsis,
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 }
 
+// ignore: unused_element
 class _InlineItemEntry extends StatelessWidget {
   const _InlineItemEntry({
-    super.key,
     required this.categories,
     required this.categoryController,
     required this.itemNameController,
@@ -1402,18 +2119,18 @@ class _InlineItemEntry extends StatelessWidget {
                   },
 
                   onAddNew: (name) async {
-                    print("Typed Name = $name");
+                    debugPrint("Typed Name = $name");
 
                     try {
                       final newCategory = await CategoryService().addCategory(
                         name: name.trim(),
                       );
 
-                      print("Added = ${newCategory.name}");
+                      debugPrint("Added = ${newCategory.name}");
 
                       categoryController.text = newCategory.name;
                     } catch (e) {
-                      print("ERROR: $e");
+                      debugPrint("ERROR: $e");
                     }
                   },
                 ),
@@ -1521,36 +2238,50 @@ class _FormSectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFD4DEE8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
+          Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFFD7E9FF),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, size: 17, color: const Color(0xFF1167E8)),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          child,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: child,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
+// ignore: unused_element
 class _TwoColumnFields extends StatelessWidget {
   const _TwoColumnFields({required this.left, required this.right});
 
@@ -1569,6 +2300,7 @@ class _TwoColumnFields extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _FourColumnFields extends StatelessWidget {
   const _FourColumnFields({
     required this.first,
@@ -1602,10 +2334,9 @@ class _LabeledInput extends StatelessWidget {
   const _LabeledInput({
     required this.label,
     required this.hint,
-    this.maxLines = 1,
     this.controller,
-    this.keyboardType,
-  });
+  }) : keyboardType = null,
+       maxLines = 1;
 
   final String label;
   final String hint;
@@ -1621,35 +2352,39 @@ class _LabeledInput extends StatelessWidget {
         Text(
           label,
           style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF17213B),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         SizedBox(
-          height: 42,
+          height: maxLines == 1 ? 27 : 56,
           child: TextField(
             controller: controller,
             maxLines: maxLines,
             keyboardType: keyboardType,
+            style: const TextStyle(fontSize: 12.5, color: Color(0xFF17213B)),
             decoration: InputDecoration(
               hintText: hint,
               isDense: true,
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 10,
+                horizontal: 9,
+                vertical: 6,
               ),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
+              ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.blue, width: 1.5),
+                borderRadius: BorderRadius.circular(4),
+                borderSide: const BorderSide(color: Color(0xFF1167E8)),
               ),
             ),
           ),
@@ -1672,36 +2407,29 @@ class _ItemsEditorTable extends StatefulWidget {
 class _ItemsEditorTableState extends State<_ItemsEditorTable> {
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const Divider(height: 1),
-        if (widget.items.isEmpty)
-          Container(
-            height: 96,
-            alignment: Alignment.center,
-            child: Text(
-              'No items added yet. Click Add Item Row to enter item details.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-            ),
-          )
-        else
-          Column(
-            children: List.generate(widget.items.length, (index) {
-              return _ItemDisplayRow(
-                index: index,
-                row: widget.items[index],
-                onRemove: () => widget.onRemoveRow(index),
-              );
-            }),
-          ),
-      ],
+    if (widget.items.isEmpty) {
+      return Center(
+        child: Text(
+          'No items added yet. Click Add Item Row to enter item details.',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: widget.items.length,
+      itemBuilder: (context, index) => _ItemDisplayRow(
+        index: index,
+        row: widget.items[index],
+        onRemove: () => widget.onRemoveRow(index),
+      ),
     );
   }
 }
-
-
 
 class _ItemDisplayRow extends StatelessWidget {
   const _ItemDisplayRow({
@@ -1717,14 +2445,15 @@ class _ItemDisplayRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = this.row;
-    final total = (row.qty * row.rate - row.discount).clamp(0, double.infinity);
+    (row.qty * row.rate - row.discount).clamp(0, double.infinity);
 
     Widget cell(Widget child, {int flex = 1}) {
       return Expanded(flex: flex, child: child);
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      height: 22,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: index.isEven ? Colors.white : const Color(0xFFFCFDFF),
         border: Border(
@@ -1733,9 +2462,16 @@ class _ItemDisplayRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          cell(Text('${index + 1}', style: const TextStyle(fontSize: 12)), flex: 1),
           cell(
-            Text(row.category, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+            Text('${index + 1}', style: const TextStyle(fontSize: 12)),
+            flex: 1,
+          ),
+          cell(
+            Text(
+              row.category,
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
             flex: 2,
           ),
           cell(
@@ -1747,24 +2483,40 @@ class _ItemDisplayRow extends StatelessWidget {
             flex: 3,
           ),
           cell(
-            Text(row.itemCode, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+            Text(
+              row.itemCode,
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+            ),
             flex: 2,
           ),
           cell(Text(row.unit, style: const TextStyle(fontSize: 12)), flex: 1),
           cell(
-            Text(row.qty.toStringAsFixed(2), style: const TextStyle(fontSize: 12)),
+            Text(
+              row.qty.toStringAsFixed(2),
+              style: const TextStyle(fontSize: 12),
+            ),
             flex: 1,
           ),
           cell(
-            Text(row.rate.toStringAsFixed(2), style: const TextStyle(fontSize: 12)),
+            Text(
+              row.rate.toStringAsFixed(2),
+              style: const TextStyle(fontSize: 12),
+            ),
             flex: 1,
           ),
           cell(
-            Text(row.tax.toStringAsFixed(0), style: const TextStyle(fontSize: 12)),
+            Text(
+              row.tax.toStringAsFixed(0),
+              style: const TextStyle(fontSize: 12),
+            ),
             flex: 1,
           ),
           cell(
-            Text(row.discount.toStringAsFixed(2), style: const TextStyle(fontSize: 12)),
+            Text(
+              row.discount.toStringAsFixed(2),
+              style: const TextStyle(fontSize: 12),
+            ),
             flex: 1,
           ),
           cell(
@@ -1787,14 +2539,14 @@ class _ItemDisplayRow extends StatelessWidget {
   }
 }
 
-enum _GlossyTone { silver, steel, navy }
+enum _GlossyTone { clear, draft, receive, print }
 
 class _GlossyButton extends StatelessWidget {
   const _GlossyButton({
     required this.label,
     required this.onPressed,
     this.icon,
-    this.tone = _GlossyTone.silver,
+    this.tone = _GlossyTone.draft,
     this.loading = false,
   });
 
@@ -1808,90 +2560,69 @@ class _GlossyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
 
-    final Color top;
-    final Color mid;
-    final Color bottom;
-    final Color border;
-    final Color text;
-
-    switch (tone) {
-     case _GlossyTone.navy:
-  top = const Color(0xFF2F5CC8);
-  mid = const Color(0xFF2F5CC8);
-  bottom = const Color(0xFF2F5CC8);
-  border = const Color(0xFF254DAA);
-  text = Colors.white;
-  break;
-     case _GlossyTone.steel:
-  top = const Color(0xFFF8FAFC);
-  mid = const Color(0xFFF8FAFC);
-  bottom = const Color(0xFFF8FAFC);
-  border = const Color(0xFFD1D5DB);
-  text = const Color(0xFF374151);
-  break;
-      case _GlossyTone.silver:
-        top = const Color.fromARGB(255, 28, 186, 117);
-        mid = const Color.fromARGB(255, 15, 196, 120);
-        bottom = const Color.fromARGB(255, 17, 160, 48);
-        border = const Color.fromARGB(255, 25, 206, 91);
-        text = const Color.fromARGB(255, 185, 187, 190);
-        break;
-    }
+    final (background, foreground, borderColor) = switch (tone) {
+      _GlossyTone.clear => (
+        const Color(0xFFDC3545),
+        Colors.white,
+        const Color(0xFFC52A39),
+      ),
+      _GlossyTone.draft => (
+        const Color(0xFFE5E7EB),
+        const Color(0xFF374151),
+        const Color(0xFFD1D5DB),
+      ),
+      _GlossyTone.receive => (
+        const Color(0xFF198754),
+        Colors.white,
+        const Color(0xFF157347),
+      ),
+      _GlossyTone.print => (
+        const Color(0xFF1167E8),
+        Colors.white,
+        const Color(0xFF0B55C0),
+      ),
+    };
 
     return Opacity(
       opacity: enabled ? 1 : 0.55,
       child: Material(
-        color: Colors.transparent,
+        color: background,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(color: borderColor),
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(4),
           onTap: enabled ? onPressed : null,
-          child: Ink(
-            height: 37,
-            padding: const EdgeInsets.symmetric(horizontal: 9),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: border),
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [top, mid, bottom],
-                stops: const [0, 0.5, 1],
-              ),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x16000000),
-                  blurRadius: 3,
-                  offset: Offset(0, 1.5),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (loading)
-                  SizedBox(
-                    width: 11,
-                    height: 11,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.8,
-                      valueColor: AlwaysStoppedAnimation<Color>(text),
+          child: SizedBox(
+            height: 32,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (loading)
+                    SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.8,
+                        valueColor: AlwaysStoppedAnimation<Color>(foreground),
+                      ),
+                    )
+                  else if (icon != null)
+                    Icon(icon, size: 14, color: foreground),
+                  if (icon != null || loading) const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
                     ),
-                  )
-                else if (icon != null)
-                  Icon(icon, size: 11, color: text),
-                if (icon != null || loading) const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: text,
-                    fontSize: 10.6,
-                    fontWeight: FontWeight.w700,
-                    shadows: const [
-                      Shadow(color: Color(0x22000000), offset: Offset(0, 1)),
-                    ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -1902,15 +2633,20 @@ class _GlossyButton extends StatelessWidget {
 
 class _SupplierDropdownCompact extends StatefulWidget {
   const _SupplierDropdownCompact({
-    super.key,
     required this.controller,
     required this.suppliers,
     required this.onSelected,
+    required this.onAddNew,
+    this.isLoading = false,
+    this.errorMessage,
   });
 
   final TextEditingController controller;
   final List<SupplierModel> suppliers;
   final Function(SupplierModel) onSelected;
+  final ValueChanged<String> onAddNew;
+  final bool isLoading;
+  final String? errorMessage;
 
   @override
   State<_SupplierDropdownCompact> createState() =>
@@ -1944,7 +2680,11 @@ class _SupplierDropdownCompactState extends State<_SupplierDropdownCompact> {
   void didUpdateWidget(covariant _SupplierDropdownCompact oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.suppliers != widget.suppliers) {
-      _filteredSuppliers = widget.suppliers;
+      _filteredSuppliers = _matchingSuppliers(widget.controller.text);
+    }
+    if (oldWidget.suppliers != widget.suppliers ||
+        oldWidget.isLoading != widget.isLoading ||
+        oldWidget.errorMessage != widget.errorMessage) {
       _overlay?.markNeedsBuild();
     }
   }
@@ -1957,13 +2697,22 @@ class _SupplierDropdownCompactState extends State<_SupplierDropdownCompact> {
   }
 
   void _filterSuppliers(String query) {
-    _filteredSuppliers = query.trim().isEmpty
-        ? widget.suppliers
-        : widget.suppliers
-            .where((s) => s.name.toLowerCase().contains(query.toLowerCase()))
-            .toList();
+    _filteredSuppliers = _matchingSuppliers(query);
     _overlay?.markNeedsBuild();
     setState(() {});
+  }
+
+  List<SupplierModel> _matchingSuppliers(String query) {
+    final normalizedQuery = query.trim().toLowerCase();
+    if (normalizedQuery.isEmpty) return widget.suppliers;
+    return widget.suppliers.where((supplier) {
+      return [
+        supplier.name,
+        supplier.code,
+        supplier.phone,
+        supplier.location,
+      ].any((value) => value.toLowerCase().contains(normalizedQuery));
+    }).toList();
   }
 
   void _showOverlay() {
@@ -1972,171 +2721,393 @@ class _SupplierDropdownCompactState extends State<_SupplierDropdownCompact> {
       return;
     }
 
-    _overlay = OverlayEntry(builder: (context) {
-      final renderBox = _targetKey.currentContext?.findRenderObject() as RenderBox?;
-      if (renderBox == null) {
-        return const SizedBox.shrink();
-      }
-      final size = renderBox.size;
+    _overlay = OverlayEntry(
+      builder: (context) {
+        final renderBox =
+            _targetKey.currentContext?.findRenderObject() as RenderBox?;
+        if (renderBox == null) {
+          return const SizedBox.shrink();
+        }
+        final size = renderBox.size;
+        final overlayBox =
+            Overlay.of(context).context.findRenderObject() as RenderBox?;
+        final viewportSize = overlayBox?.size ?? MediaQuery.sizeOf(context);
+        final targetPosition = overlayBox == null
+            ? renderBox.localToGlobal(Offset.zero)
+            : renderBox.localToGlobal(Offset.zero, ancestor: overlayBox);
+        final availableWidth = (viewportSize.width - 24).clamp(
+          0.0,
+          viewportSize.width,
+        );
+        final menuWidth = (size.width < 300 ? 360.0 : size.width)
+            .clamp(0.0, availableWidth)
+            .toDouble();
+        final menuHeight =
+            (38 +
+                    (_filteredSuppliers.isEmpty
+                        ? 56
+                        : _filteredSuppliers.length * 50) +
+                    (_canAddNew ? 44 : 0))
+                .clamp(0, 320)
+                .toDouble();
+        final mediaPadding = MediaQuery.paddingOf(context);
+        final availableBelow =
+            viewportSize.height -
+            targetPosition.dy -
+            size.height -
+            mediaPadding.bottom -
+            5;
+        final availableHeight = availableBelow
+            .clamp(0.0, menuHeight)
+            .toDouble();
+        final targetLeft = targetPosition.dx;
+        final menuLeft = targetLeft
+            .clamp(12.0, viewportSize.width - menuWidth - 12)
+            .toDouble();
 
-      return Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: _hideOverlay,
-              child: const SizedBox(),
-            ),
-          ),
-          CompositedTransformFollower(
-            link: _layerLink,
-            showWhenUnlinked: false,
-            offset: Offset(0, size.height + 10),
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                width: size.width,
-                constraints: const BoxConstraints(maxHeight: 180),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300, width: 0.8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: _filteredSuppliers.isEmpty
-                    ? widget.controller.text.trim().isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Text(
-                              'No suppliers found',
-                              style: TextStyle(fontSize: 12, color: Colors.black54),
-                            ),
-                          )
-                        : InkWell(
-                            onTapDown: (_) {
-                              _ignoreFocusLoss = true;
-                            },
-                            onTap: () {
-                              final typedName = widget.controller.text.trim();
-                              setState(() {
-                                widget.controller.text = typedName;
-                                widget.controller.selection = TextSelection.collapsed(
-                                  offset: typedName.length,
-                                );
-                              });
-                              widget.onSelected(
-                                SupplierModel(
-                                  name: typedName,
-                                  code: '',
-                                  phone: '',
-                                  gstin: '',
-                                  address: '',
-                                  location: '',
-                                  outstandingBalance: 0.0,
-                                ),
-                              );
-                              _hideOverlay();
-                              _focusNode.unfocus();
-                              _ignoreFocusLoss = false;
-                            },
-                            child: Container(
-                              width: size.width,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 14,
-                              ),
-                              child: Text(
-                                'Add new supplier "${widget.controller.text.trim()}"',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.blue,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          )
-                    : ListView.builder(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: true,
-                        itemCount: _filteredSuppliers.length,
-                        itemBuilder: (context, index) {
-                          final supplier = _filteredSuppliers[index];
-                          final subtitleText = [supplier.code, supplier.location]
-                              .where((value) => value.trim().isNotEmpty)
-                              .join(' · ');
-                          return InkWell(
-                            onTapDown: (_) {
-                              _ignoreFocusLoss = true;
-                            },
-                            onTap: () {
-                              setState(() {
-                                widget.controller.text = supplier.name;
-                                widget.controller.selection = TextSelection.collapsed(
-                                  offset: supplier.name.length,
-                                );
-                              });
-                              widget.onSelected(supplier);
-                              _hideOverlay();
-                              _focusNode.unfocus();
-                              _ignoreFocusLoss = false;
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          supplier.name,
-                                          style: const TextStyle(fontSize: 13),
-                                        ),
-                                        if (subtitleText.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 4),
-                                            child: Text(
-                                              subtitleText,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.black54,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  Text(
-                                    supplier.outstandingBalance.toStringAsFixed(2),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _hideOverlay,
+                child: const SizedBox(),
               ),
             ),
-          ),
-        ],
-      );
-    });
+            CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: Offset(menuLeft - targetLeft, size.height + 5),
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  width: menuWidth,
+                  constraints: BoxConstraints(maxHeight: availableHeight),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFDCE5F0)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF17365D).withValues(alpha: 0.12),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: widget.isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(18),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                SizedBox(width: 10),
+                                Text(
+                                  'Loading suppliers…',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF52657A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : widget.errorMessage != null
+                        ? Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Text(
+                              widget.errorMessage!,
+                              style: const TextStyle(
+                                color: Color(0xFFB42318),
+                                fontSize: 12,
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: _filteredSuppliers.isEmpty
+                                ? 2 + (_canAddNew ? 1 : 0)
+                                : 1 +
+                                      _filteredSuppliers.length +
+                                      (_canAddNew ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == 0) {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 9,
+                                  ),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFF6F9FD),
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Color(0xFFE7EDF4),
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Text(
+                                        'SUPPLIERS',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          letterSpacing: 0.7,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF63758A),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Text(
+                                        '${_filteredSuppliers.length} found',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: Color(0xFF8292A5),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              if (_filteredSuppliers.isEmpty) {
+                                if (index == 1) {
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 14,
+                                    ),
+                                    child: Text(
+                                      widget.controller.text.trim().isEmpty
+                                          ? 'No suppliers available'
+                                          : 'No matching supplier found',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF718096),
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return _buildAddSupplierOption();
+                              }
+
+                              final supplierIndex = index - 1;
+                              if (_canAddNew &&
+                                  supplierIndex == _filteredSuppliers.length) {
+                                return _buildAddSupplierOption();
+                              }
+                              final supplier =
+                                  _filteredSuppliers[supplierIndex];
+                              final subtitle = supplier.location.trim();
+                              final isSelected =
+                                  widget.controller.text.trim().toLowerCase() ==
+                                  supplier.name.trim().toLowerCase();
+
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Material(
+                                    color: isSelected
+                                        ? const Color(0xFFF0F6FF)
+                                        : Colors.white,
+                                    child: InkWell(
+                                      onTapDown: (_) {
+                                        _ignoreFocusLoss = true;
+                                      },
+                                      onTap: () {
+                                        widget.controller.text = supplier.name;
+                                        widget.controller.selection =
+                                            TextSelection.collapsed(
+                                              offset: supplier.name.length,
+                                            );
+                                        widget.onSelected(supplier);
+                                        _hideOverlay();
+                                        _focusNode.unfocus();
+                                        _ignoreFocusLoss = false;
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 9,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 30,
+                                              height: 30,
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFEAF2FF),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: Text(
+                                                supplier.name
+                                                    .trim()
+                                                    .characters
+                                                    .first
+                                                    .toUpperCase(),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Color(0xFF1557B0),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    supplier.name,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      fontSize: 12.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Color(0xFF24364B),
+                                                    ),
+                                                  ),
+                                                  if (subtitle.isNotEmpty)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 3,
+                                                          ),
+                                                      child: Text(
+                                                        subtitle,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
+                                                          fontSize: 10.5,
+                                                          color: Color(
+                                                            0xFF8290A2,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.end,
+                                              children: [
+                                                const Text(
+                                                  'BALANCE',
+                                                  style: TextStyle(
+                                                    fontSize: 8.5,
+                                                    letterSpacing: 0.4,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF8997A8),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  supplier.outstandingBalance
+                                                      .toStringAsFixed(2),
+                                                  style: const TextStyle(
+                                                    fontSize: 11.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF34465B),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (supplierIndex <
+                                      _filteredSuppliers.length - 1)
+                                    const Divider(
+                                      height: 1,
+                                      indent: 52,
+                                      color: Color(0xFFF0F3F7),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
 
     Overlay.of(context).insert(_overlay!);
+  }
+
+  bool get _canAddNew {
+    final query = widget.controller.text.trim();
+    return query.isNotEmpty &&
+        !_filteredSuppliers.any(
+          (supplier) =>
+              supplier.name.trim().toLowerCase() == query.toLowerCase(),
+        );
+  }
+
+  Widget _buildAddSupplierOption() {
+    final name = widget.controller.text.trim();
+    if (name.isEmpty) return const SizedBox.shrink();
+    return Material(
+      color: const Color(0xFFF8FBFF),
+      child: InkWell(
+        onTapDown: (_) => _ignoreFocusLoss = true,
+        onTap: () {
+          _hideOverlay();
+          _focusNode.unfocus();
+          _ignoreFocusLoss = false;
+          widget.onAddNew(name);
+        },
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          child: Row(
+            children: [
+              Icon(
+                Icons.add_circle_outline,
+                size: 17,
+                color: Color(0xFF1167E8),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Add New Supplier',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1167E8),
+                ),
+              ),
+              Spacer(),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 12,
+                color: Color(0xFF1167E8),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _hideOverlay() {
@@ -2154,15 +3125,15 @@ class _SupplierDropdownCompactState extends State<_SupplierDropdownCompact> {
           Text(
             'Supplier Name *',
             style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A2A3A),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 3),
           SizedBox(
             key: _targetKey,
-            height: 42,
+            height: _warehouseFieldHeight,
             child: TextField(
               controller: widget.controller,
               focusNode: _focusNode,
@@ -2173,29 +3144,43 @@ class _SupplierDropdownCompactState extends State<_SupplierDropdownCompact> {
               onChanged: (value) {
                 _filterSuppliers(value);
               },
-              style: const TextStyle(fontSize: 12),
+              style: const TextStyle(fontSize: 12, color: Color(0xFF17213B)),
               decoration: InputDecoration(
                 hintText: 'Search supplier',
+                hintStyle: const TextStyle(
+                  color: Color(0xFF8AA0B6),
+                  fontSize: 12,
+                ),
+                suffixIcon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: Color(0xFF73849A),
+                ),
+                suffixIconConstraints: const BoxConstraints.tightFor(
+                  width: 30,
+                  height: 26,
+                ),
                 isDense: true,
+                constraints: const BoxConstraints.tightFor(
+                  height: _warehouseFieldHeight,
+                ),
                 filled: true,
                 fillColor: Colors.white,
                 contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 10,
+                  horizontal: 9,
+                  vertical: 6,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(
-                    color: Colors.grey.shade300,
-                    width: 0.8,
-                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: const BorderSide(color: Colors.blue, width: 1),
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(color: Color(0xFF1167E8)),
                 ),
               ),
             ),
@@ -2305,7 +3290,10 @@ class _SupplierDropdownState extends State<_SupplierDropdown> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: const BorderSide(color: Colors.blue, width: 1),
+                      borderSide: const BorderSide(
+                        color: Colors.blue,
+                        width: 1,
+                      ),
                     ),
                   ),
                 ),
@@ -2384,7 +3372,7 @@ class _SupplierDropdownState extends State<_SupplierDropdown> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'Add \"${_controller.text}\" as new supplier',
+                              'Add "${_controller.text}" as new supplier',
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: Colors.blue,
@@ -2409,6 +3397,7 @@ class _ReceiveItemRowData {
     required this.category,
     required this.itemName,
     required this.itemCode,
+    this.itemId,
     required this.hsnSac,
     required this.qty,
     required this.unit,
@@ -2420,6 +3409,7 @@ class _ReceiveItemRowData {
   final String category;
   final String itemName;
   final String itemCode;
+  final int? itemId;
   final String hsnSac;
   final double qty;
   final String unit;

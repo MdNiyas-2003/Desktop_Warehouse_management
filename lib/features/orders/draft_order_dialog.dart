@@ -98,7 +98,7 @@ class _DraftOrdersDialogState
 
             BoxShadow(
 
-              color: Colors.black.withOpacity(.15),
+              color: Colors.black.withValues(alpha: .15),
 
               blurRadius: 40,
 
@@ -219,7 +219,7 @@ class _DraftOrdersDialogState
                           style: TextStyle(
 
                             color: Colors.white
-                                .withOpacity(.9),
+                                .withValues(alpha: .9),
 
                           ),
 
@@ -463,7 +463,7 @@ class _DraftOrdersDialogState
       boxShadow: [
 
         BoxShadow(
-          color: Colors.grey.withOpacity(.08),
+          color: Colors.grey.withValues(alpha: .08),
           blurRadius: 18,
           offset: const Offset(0,8),
         )
@@ -795,7 +795,7 @@ class _DraftOrdersDialogState
     )
   );
 
-}).toList(),
+}),
                 ],
 
               ),
@@ -831,7 +831,7 @@ Widget _infoCard(
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(.08),
+            color: Colors.grey.withValues(alpha: .08),
             blurRadius: 14,
             offset: const Offset(0, 6),
           )
@@ -843,7 +843,7 @@ Widget _infoCard(
             height: 48,
             width: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(.12),
+              color: color.withValues(alpha: .12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -1041,6 +1041,7 @@ class _MouseHoverCardState
         margin: widget.margin,
 
         transform: Matrix4.identity()
+          // ignore: deprecated_member_use
           ..translate(
             0.0,
             hover ? -4.0 : 0.0,
@@ -1057,9 +1058,9 @@ class _MouseHoverCardState
 
               color: hover
 
-                  ? Colors.blue.withOpacity(.15)
+                  ? Colors.blue.withValues(alpha: .15)
 
-                  : Colors.grey.withOpacity(.08),
+                  : Colors.grey.withValues(alpha: .08),
 
               blurRadius: hover ? 28 : 14,
 

@@ -18,6 +18,7 @@ class ItemModel {
   final bool isActive;
 
   final CategoryModel? category;
+  final String? categoryName;
 
   const ItemModel({
     required this.id,
@@ -31,34 +32,36 @@ class ItemModel {
     this.hsnSac,
     this.isActive = true,
     this.category,
+    this.categoryName,
   });
 
- factory ItemModel.fromJson(Map<String, dynamic> json) {
-  double toDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString()) ?? 0;
-  }
+  factory ItemModel.fromJson(Map<String, dynamic> json) {
+    double toDouble(dynamic value) {
+      if (value == null) return 0;
+      if (value is num) return value.toDouble();
+      return double.tryParse(value.toString()) ?? 0;
+    }
 
-  int toInt(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toInt();
-    return int.tryParse(value.toString()) ?? 0;
-  }
+    int toInt(dynamic value) {
+      if (value == null) return 0;
+      if (value is num) return value.toInt();
+      return int.tryParse(value.toString()) ?? 0;
+    }
 
-  return ItemModel(
-    id: toInt(json['id']),
-    categoryId: toInt(json['category_id']),
-    name: json['item_name'] ?? '',
-    code: json['item_code'] ?? '',
-    unit: json['unit'] ?? '',
-    rate: toDouble(json['rate']),
-    gst: toDouble(json['gst']),
-    stock: toDouble(json['stock']),
-    hsnSac: json['hsn_sac'],
-    isActive: json['is_active'] ?? true,
-  );
-}
+    return ItemModel(
+      id: toInt(json['id']),
+      categoryId: toInt(json['category_id']),
+      name: json['item_name'] ?? '',
+      code: json['item_code'] ?? '',
+      unit: json['unit'] ?? '',
+      rate: toDouble(json['rate']),
+      gst: toDouble(json['gst']),
+      stock: toDouble(json['stock']),
+      hsnSac: json['hsn_sac'],
+      isActive: json['is_active'] ?? true,
+      categoryName: json['category_name']?.toString(),
+    );
+  }
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -71,6 +74,7 @@ class ItemModel {
       'hsnSac': hsnSac,
       'stock': stock,
       'isActive': isActive,
+      'categoryName': categoryName,
     };
   }
 
@@ -86,6 +90,7 @@ class ItemModel {
     double? stock,
     bool? isActive,
     CategoryModel? category,
+    String? categoryName,
   }) {
     return ItemModel(
       id: id ?? this.id,
@@ -99,6 +104,7 @@ class ItemModel {
       stock: stock ?? this.stock,
       isActive: isActive ?? this.isActive,
       category: category ?? this.category,
+      categoryName: categoryName ?? this.categoryName,
     );
   }
 

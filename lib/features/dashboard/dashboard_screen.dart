@@ -22,8 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _selectedOrderId;
   late Future<List<_OrderViewModel>> _ordersFuture;
   Timer? _ordersRefreshTimer;
-  // TODO: Re-enable inventory allocation panel in next update.
-  bool _showInventoryAllocatePanel = false;
+  final bool _showInventoryAllocatePanel = false;
 
   @override
   void initState() {
@@ -250,7 +249,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                 ],
                               ),
-                              // TODO: Enable user management section later.
                               // const SizedBox(height: 14),
                               // SizedBox(
                               //   width: constraints.maxWidth,
@@ -260,7 +258,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           );
                         },
                       ),
-                      // TODO: Enable analytics section later.
                       // Includes: Daily Orders, Monthly Sales,
                       // Sales by Region, and Top Products.
                       // const SizedBox(height: 14),
@@ -474,6 +471,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
+    // ignore: avoid_types_as_parameter_names
     final total = totals.values.fold<double>(0, (sum, value) => sum + value);
     if (total <= 0) {
       return const [
@@ -2655,6 +2653,7 @@ class _OrderViewModel {
 
     final quantityFromProducts = products.fold<double>(
       0,
+      // ignore: avoid_types_as_parameter_names
       (sum, item) => sum + _asNum(item['quantity'] ?? 0),
     );
 
@@ -2724,6 +2723,7 @@ class _OrderViewModel {
 
     final quantityFromProducts = products.fold<double>(
       0,
+      // ignore: avoid_types_as_parameter_names
       (sum, item) => sum + _asNum(item['quantity'] ?? 0),
     );
 

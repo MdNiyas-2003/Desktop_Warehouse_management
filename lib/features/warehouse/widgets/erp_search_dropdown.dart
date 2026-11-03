@@ -10,6 +10,9 @@ class ErpSearchDropdown<T> extends StatefulWidget {
     required this.onSelected,
     this.selectedItem,
     this.onAddNew,
+    this.controller,
+    this.isLoading = false,
+    this.errorMessage,
     this.width,
     this.maxHeight = 260,
   });
@@ -26,6 +29,9 @@ class ErpSearchDropdown<T> extends StatefulWidget {
   final ValueChanged<T> onSelected;
 
   final ValueChanged<String>? onAddNew;
+  final TextEditingController? controller;
+  final bool isLoading;
+  final String? errorMessage;
   final double? width;
 
   final double maxHeight;
@@ -37,7 +43,8 @@ class ErpSearchDropdown<T> extends StatefulWidget {
 class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
   final LayerLink _layerLink = LayerLink();
 
-  final TextEditingController _controller = TextEditingController();
+  late TextEditingController _controller;
+  TextEditingController? _ownedController;
 
   final FocusNode _focusNode = FocusNode();
 
@@ -48,14 +55,16 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
   @override
   void initState() {
     super.initState();
+    _controller =
+        widget.controller ?? (_ownedController = TextEditingController());
 
     _filtered = List.from(widget.items);
 
     if (widget.selectedItem != null) {
-  _controller.text = widget.itemText(widget.selectedItem as T);
-} else {
-  _controller.clear();
-}
+      _controller.text = widget.itemText(widget.selectedItem as T);
+    } else if (widget.controller == null) {
+      _controller.clear();
+    }
 
     _focusNode.addListener(() {
       if (_focusNode.hasFocus) {
@@ -68,6 +77,18 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
   void didUpdateWidget(covariant ErpSearchDropdown<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (oldWidget.controller != widget.controller) {
+      if (oldWidget.controller == null) {
+        _ownedController?.dispose();
+        _ownedController = null;
+      }
+      _controller =
+          widget.controller ??
+          (_ownedController = TextEditingController(
+            text: oldWidget.controller?.text,
+          ));
+    }
+
     if (oldWidget.items != widget.items) {
       _filtered = List.from(widget.items);
 
@@ -76,18 +97,24 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
       }
     }
 
-   if (widget.selectedItem != null) {
-  _controller.text = widget.itemText(widget.selectedItem as T);
-} else {
-  _controller.clear();
-}
+    if (widget.selectedItem != oldWidget.selectedItem) {
+      if (widget.selectedItem != null) {
+        _controller.text = widget.itemText(widget.selectedItem as T);
+      } else {
+        _controller.clear();
+      }
+    }
+    if (oldWidget.isLoading != widget.isLoading ||
+        oldWidget.errorMessage != widget.errorMessage) {
+      _overlay?.markNeedsBuild();
+    }
   }
 
   @override
   void dispose() {
     _hideOverlay();
 
-    _controller.dispose();
+    _ownedController?.dispose();
     _focusNode.dispose();
 
     super.dispose();
@@ -110,6 +137,16 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
     }
 
     setState(() {});
+  }
+
+  bool get _canAddNew {
+    final query = _controller.text.trim();
+    return widget.onAddNew != null &&
+        query.isNotEmpty &&
+        !_filtered.any(
+          (item) =>
+              widget.itemText(item).trim().toLowerCase() == query.toLowerCase(),
+        );
   }
 
   void _hideOverlay() {
@@ -154,7 +191,7 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
             CompositedTransformFollower(
               link: _layerLink,
               showWhenUnlinked: false,
-              offset: const Offset(0, 66),
+              offset: Offset(0, size.height + 4),
               child: Material(
                 color: Colors.transparent,
                 child: Container(
@@ -174,118 +211,153 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: ListView.builder(
-                      padding: EdgeInsets.zero,
-                      shrinkWrap: true,
-                      itemCount: _filtered.isEmpty
-                          ? (widget.onAddNew != null ? 2 : 1)
-                          : _filtered.length +
-                                (widget.onAddNew != null ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (_filtered.isEmpty) {
-                          if (index == 0) {
-                            return const ListTile(
-                              dense: true,
-                              title: Text(
-                                "No records found",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            );
-                          }
-
-                          return InkWell(
-                            onTap: () {
-                              _hideOverlay();
-
-                              widget.onAddNew?.call(_controller.text.trim());
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  top: BorderSide(color: Colors.grey.shade300),
+                    child: widget.isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(14),
+                            child: Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
                                 ),
                               ),
-                              child: const Row(
-                                children: [
-                                  Icon(
-                                    Icons.add_circle,
-                                    color: Colors.blue,
-                                    size: 20,
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    "Add New",
-                                    style: TextStyle(
-                                      color: Colors.blue,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ),
-                          );
-                        }
-
-                        if (widget.onAddNew != null &&
-                            index == _filtered.length) {
-                          return InkWell(
-                            onTap: () {
-                              _hideOverlay();
-                              widget.onAddNew?.call(_controller.text.trim());
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  top: BorderSide(color: Colors.grey.shade300),
-                                ),
-                              ),
-                              child: const Row(
-                                children: [
-                                  Icon(
-                                    Icons.add_circle,
-                                    size: 20,
-                                    color: Colors.blue,
-                                  ),
-                                  SizedBox(width: 10),
-                                  Text(
-                                    "Add New",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        final item = _filtered[index];
-
-                        return InkWell(
-                          onTap: () => _selectItem(item),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
+                          )
+                        : widget.errorMessage != null
+                        ? Padding(
+                            padding: const EdgeInsets.all(12),
                             child: Text(
-                              widget.itemText(item),
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 14),
+                              widget.errorMessage!,
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 12,
+                              ),
                             ),
+                          )
+                        : ListView.builder(
+                            padding: EdgeInsets.zero,
+                            shrinkWrap: true,
+                            itemCount: _filtered.isEmpty
+                                ? (widget.onAddNew != null &&
+                                          _controller.text.trim().isNotEmpty
+                                      ? 2
+                                      : 1)
+                                : _filtered.length + (_canAddNew ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (_filtered.isEmpty) {
+                                if (index == 0) {
+                                  return const ListTile(
+                                    dense: true,
+                                    title: Text(
+                                      "No records found",
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  );
+                                }
+
+                                return InkWell(
+                                  onTap: () {
+                                    _hideOverlay();
+
+                                    widget.onAddNew?.call(
+                                      _controller.text.trim(),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        top: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(
+                                          Icons.add_circle,
+                                          color: Colors.blue,
+                                          size: 20,
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          "Add New",
+                                          style: TextStyle(
+                                            color: Colors.blue,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              if (widget.onAddNew != null &&
+                                  _canAddNew &&
+                                  index == _filtered.length) {
+                                return InkWell(
+                                  onTap: () {
+                                    _hideOverlay();
+                                    widget.onAddNew?.call(
+                                      _controller.text.trim(),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: Border(
+                                        top: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(
+                                          Icons.add_circle,
+                                          size: 20,
+                                          color: Colors.blue,
+                                        ),
+                                        SizedBox(width: 10),
+                                        Text(
+                                          "Add New",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              final item = _filtered[index];
+
+                              return InkWell(
+                                onTap: () => _selectItem(item),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  child: Text(
+                                    widget.itemText(item),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
                   ),
                 ),
               ),
@@ -308,38 +380,42 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
           Text(
             widget.label,
             style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A2A3A),
             ),
           ),
 
-          const SizedBox(height: 6),
+          const SizedBox(height: 3),
 
           SizedBox(
             width: widget.width,
-            height: 30,
+            height: 32,
             child: TextField(
               controller: _controller,
               focusNode: _focusNode,
               onChanged: (value) {
                 _filter(value);
               },
+              style: const TextStyle(fontSize: 12, color: Color(0xFF17213B)),
               decoration: InputDecoration(
                 hintText: widget.hint,
-
-                hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-
+                hintStyle: const TextStyle(
+                  color: Color(0xFF8AA0B6),
+                  fontWeight: FontWeight.w500,
+                ),
                 filled: true,
                 fillColor: Colors.white,
-
                 isDense: true,
-
+                constraints: const BoxConstraints.tightFor(height: 32),
                 contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+                  horizontal: 9,
+                  vertical: 9,
                 ),
-
+                suffixIconConstraints: const BoxConstraints.tightFor(
+                  width: 30,
+                  height: 26,
+                ),
                 suffixIcon: InkWell(
                   onTap: () {
                     if (_overlay == null) {
@@ -352,20 +428,19 @@ class _ErpSearchDropdownState<T> extends State<ErpSearchDropdown<T>> {
                   },
                   child: Icon(
                     _overlay == null
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_up,
-                    color: Colors.grey.shade700,
+                        ? Icons.keyboard_arrow_down_rounded
+                        : Icons.keyboard_arrow_up_rounded,
+                    color: const Color(0xFF1B2D48),
+                    size: 18,
                   ),
                 ),
-
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(color: Color(0xFFD4DEE8)),
                 ),
-
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.blue, width: 1.4),
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(color: Color(0xFF1167E8)),
                 ),
               ),
             ),

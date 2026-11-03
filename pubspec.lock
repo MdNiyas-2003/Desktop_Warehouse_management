@@ -254,6 +254,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_plugin_android_lifecycle:
+    dependency: transitive
+    description:
+      name: flutter_plugin_android_lifecycle
+      sha256: "3854fe5e3bff0b113c658f260b90c95dea17c92db0f2addeac2e343dd9969785"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.35"
   flutter_spinkit:
     dependency: "direct main"
     description:
@@ -576,6 +584,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.2"
+  qr_flutter:
+    dependency: "direct main"
+    description:
+      name: qr_flutter
+      sha256: "5095f0fc6e3f71d08adef8feccc8cea4f12eec18a2e31c2e8d82cb6019f4b097"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.0"
   record_use:
     dependency: transitive
     description:
@@ -661,6 +677,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
+  universal_barcode_scanner:
+    dependency: "direct main"
+    description:
+      name: universal_barcode_scanner
+      sha256: "0decaac9164176bbfb3288df0db6d7411ca06841cf1bd658e07140b86241bf08"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.0"
   url_launcher_linux:
     dependency: transitive
     description:
@@ -725,6 +749,70 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  webview_all:
+    dependency: transitive
+    description:
+      name: webview_all
+      sha256: "9daa137e52fdb9dbda9cede3f7d14afc60b1ce790a41b1c264feea5b5c4538a5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
+  webview_all_android:
+    dependency: transitive
+    description:
+      name: webview_all_android
+      sha256: "436092e9a758f3efadb4f9814bff8f60e0e849d66d5f9568618ab1c098bfbb27"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
+  webview_all_linux:
+    dependency: transitive
+    description:
+      name: webview_all_linux
+      sha256: "323defb2cb47fb895128901fa28bfe90181a24b27dafec39549690489ca7b178"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
+  webview_all_ohos:
+    dependency: transitive
+    description:
+      name: webview_all_ohos
+      sha256: "83a7022fa1d217b7d5829f53cbad19922829c3ec59de0feec86a5669d3703d13"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
+  webview_all_web:
+    dependency: transitive
+    description:
+      name: webview_all_web
+      sha256: dbbd46c8c8ef1daedc851efeac23d5117063f60eebc8f0bfaec090e655c8b50b
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
+  webview_all_windows:
+    dependency: transitive
+    description:
+      name: webview_all_windows
+      sha256: "28cb43992d356c621bee54cbac34096dda7f78b6839a205b5f64b723b97b6d1d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
+  webview_all_wkwebview:
+    dependency: transitive
+    description:
+      name: webview_all_wkwebview
+      sha256: "8030eb72948cfb138d04d2f7195796c88faba583267780c69b037793553419e7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
+  webview_platform_interface:
+    dependency: transitive
+    description:
+      name: webview_platform_interface
+      sha256: "942a83228679c16e8aabb9fff1e3dbc6fdf842517d0f566699f10a567b681b9a"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.10"
   win32:
     dependency: transitive
     description:

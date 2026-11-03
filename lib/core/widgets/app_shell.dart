@@ -138,12 +138,11 @@ class _DesktopEntryState extends State<DesktopEntry> {
 
 class _Sidebar extends StatefulWidget {
   const _Sidebar({
-    Key? key,
     required this.selectedIndex,
     required this.onSelected,
     required this.onNewOrderTap,
     required this.onCreateCustomerTap,
-  }) : super(key: key);
+  });
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
